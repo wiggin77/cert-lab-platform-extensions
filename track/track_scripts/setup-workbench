@@ -41,8 +41,37 @@ wait_for() {
 # ---------------------------------------------------------------------------
 log "installing base packages"
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq git curl jq ca-certificates build-essential unzip >/dev/null
+
+# Retry the install itself rather than probing apt for readiness. A probe on package
+# metadata was misleading: apt reported a healthy update (35 MB fetched, all sources hit)
+# while the probe still said the lists were unusable. What matters is whether the packages
+# install, so ask that question directly and show the real error when they do not.
+install_pkgs() {
+    local attempt
+    for attempt in 1 2 3; do
+        apt-get update >/dev/null 2>&1 || true
+        if apt-get install -y -qq "$@" >/tmp/apt-install.log 2>&1; then
+            return 0
+        fi
+        log "apt install of '$*' failed (attempt ${attempt}):"
+        tail -8 /tmp/apt-install.log | sed 's/^/[setup]   apt: /'
+        sleep 10
+    done
+    return 1
+}
+
+install_pkgs git curl jq ca-certificates || {
+    echo "[setup] FAILED: could not install base packages" >&2
+    exit 1
+}
+
+# Only needed if a native npm module or a cgo build shows up. Neither has, and Mattermost
+# plugins build with CGO_ENABLED=0, so its absence must not stop the track. It went
+# missing on a stock jammy image once, hence the diagnostic.
+if ! install_pkgs build-essential; then
+    log "build-essential unavailable, continuing without it. apt says:"
+    apt-cache policy build-essential 2>&1 | sed 's/^/[setup]   /'
+fi
 
 log "installing Node ${NODE_MAJOR}"
 curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null 2>&1
