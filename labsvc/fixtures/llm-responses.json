@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Canned completions for the Module 6 mock LLM. Keyed by <skill>:<severity>.",
+    "Deterministic on purpose: no API key in a public sandbox, no per learner token cost,",
+    "no egress, and text the grader can actually assert against. See DESIGN.md section 5.3."
+  ],
+
+  "default": "No analysis is available for this alert. Confirm the alert context was passed to the skill.",
+
+  "responses": {
+    "analyze_threat_surface:CRITICAL": "**Threat surface assessment: CRITICAL**\n\nThis indicator is associated with an active intrusion set with confirmed hands on keyboard activity. Exposure is not limited to the reporting host.\n\n- **Blast radius.** Any host that resolved or connected to this indicator in the last 14 days should be treated as suspect. Pull proxy and DNS logs for that window before scoping further.\n- **Credential exposure.** Assume any credential cached on the affected host is compromised, including service accounts and browser stored secrets.\n- **Persistence.** Expect scheduled tasks, run keys, and service installs. A single quarantine event does not clear this family.\n- **Lateral movement.** Check for SMB and WinRM sessions originating from the affected host in the hour either side of first detection.\n\n**Confidence:** high. **Recommended posture:** contain now, investigate after.",
+
+    "analyze_threat_surface:HIGH": "**Threat surface assessment: HIGH**\n\nThe indicator is credibly malicious but the observed activity is consistent with an early stage of the intrusion.\n\n- **Blast radius.** Likely limited to the reporting host and anything sharing its subnet segment. Widen only if you find a second hit.\n- **Credential exposure.** Possible but unconfirmed. Rotate the interactive user's credentials as a precaution.\n- **Persistence.** Not yet established in most cases at this stage. Check autoruns to confirm.\n- **Delivery.** Trace the initial vector. Mail gateway and proxy logs usually settle this in one query.\n\n**Confidence:** moderate. **Recommended posture:** investigate promptly, contain if a second host appears.",
+
+    "analyze_threat_surface:INFO": "**Threat surface assessment: INFORMATIONAL**\n\nNo evidence of compromise. This is background noise or a control validation event.\n\n- **Blast radius.** None identified.\n- **Action.** Record and close unless the pattern repeats. Three or more occurrences in 24 hours is worth a second look.\n- **Tuning.** If this source generates repeated informational alerts, it is a candidate for a suppression rule rather than analyst time.\n\n**Confidence:** high. **Recommended posture:** monitor only.",
+
+    "suggest_remediation:CRITICAL": "**Remediation plan: CRITICAL**\n\n1. **Isolate** the affected host at the network layer now. Do not power it off, memory is evidence.\n2. **Block** the indicator at the perimeter, proxy, and DNS sinkhole simultaneously. Blocking one layer only moves the traffic.\n3. **Revoke and rotate** every credential that touched the host, including Kerberos tickets. Force a krbtgt rotation if a domain controller is involved.\n4. **Hunt** for the same indicator across the estate before you clean anything, or you will lose the pivot.\n5. **Preserve** a memory capture and the relevant event logs before reimaging.\n6. **Reimage.** Do not attempt in place cleaning for this family.\n7. **Notify** the incident commander and start the regulatory clock assessment.\n\n**Owner:** on call incident responder. **Target:** containment within 30 minutes.",
+
+    "suggest_remediation:HIGH": "**Remediation plan: HIGH**\n\n1. **Quarantine** the detected artefact and confirm the EDR action actually completed.\n2. **Block** the indicator at the proxy and add it to the watchlist.\n3. **Scope** by searching for the indicator across endpoint and network telemetry for the last 7 days.\n4. **Rotate** the affected user's credentials and terminate active sessions.\n5. **Verify** persistence mechanisms are absent: scheduled tasks, run keys, services, WMI subscriptions.\n6. **Close the vector.** If delivery was email, pull the message from all mailboxes and update the gateway rule.\n\n**Owner:** duty analyst. **Target:** resolved within the shift.",
+
+    "suggest_remediation:INFO": "**Remediation plan: INFORMATIONAL**\n\n1. **Record** the observation against the source asset.\n2. **No containment required.**\n3. **Tune** if this is the third or later occurrence from the same source in 24 hours. Repeated informational alerts cost more analyst attention than they return.\n4. **Review** at the weekly detection tuning meeting rather than in the queue.\n\n**Owner:** detection engineering backlog. **Target:** next tuning cycle."
+  }
+}

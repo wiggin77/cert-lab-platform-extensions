@@ -1,0 +1,128 @@
+{
+  "_comment": [
+    "Synthetic threat intel used by the Module 4 mock API. All addresses are drawn from",
+    "RFC 5737 / RFC 3849 documentation ranges or are obviously fictional, so nothing here",
+    "resolves to a real host. Hashes are random.",
+    "",
+    "Two entries are deliberately awkward, see DESIGN.md section 5.2:",
+    "  - 198.51.100.23 is listed in 'misses', so it 404s even though alerts reference it",
+    "  - telemetry-sync.example has an empty campaigns array"
+  ],
+
+  "misses": ["198.51.100.23", "8f2a1c9e4b7d6a3f0e5c8b1d4a7f2e9c6b3d0a5f8e1c4b7d2a9f6e3c0b5d8a1f"],
+
+  "records": [
+    {
+      "indicator": "203.0.113.47",
+      "indicator_type": "ipv4",
+      "malware_family": "Emotet",
+      "confidence": 92,
+      "last_seen": "2026-08-17T04:12:00Z",
+      "campaigns": ["TA542 Autumn Wave", "Epoch5 Redist"]
+    },
+    {
+      "indicator": "203.0.113.112",
+      "indicator_type": "ipv4",
+      "malware_family": "Cobalt Strike",
+      "confidence": 88,
+      "last_seen": "2026-08-18T21:40:00Z",
+      "campaigns": ["Silver Trident"]
+    },
+    {
+      "indicator": "198.51.100.9",
+      "indicator_type": "ipv4",
+      "malware_family": "QakBot",
+      "confidence": 74,
+      "last_seen": "2026-08-11T13:05:00Z",
+      "campaigns": ["BB23 Spray", "Obama270 Distribution"]
+    },
+    {
+      "indicator": "192.0.2.201",
+      "indicator_type": "ipv4",
+      "malware_family": "IcedID",
+      "confidence": 81,
+      "last_seen": "2026-08-16T09:55:00Z",
+      "campaigns": ["Bokbot Relay"]
+    },
+    {
+      "indicator": "192.0.2.66",
+      "indicator_type": "ipv4",
+      "malware_family": "Unattributed Scanner",
+      "confidence": 31,
+      "last_seen": "2026-08-19T02:18:00Z",
+      "campaigns": []
+    },
+    {
+      "indicator": "cdn-update-svc.example",
+      "indicator_type": "domain",
+      "malware_family": "SocGholish",
+      "confidence": 95,
+      "last_seen": "2026-08-18T17:33:00Z",
+      "campaigns": ["FakeUpdates", "TA569 Inject"]
+    },
+    {
+      "indicator": "secure-login-portal.example",
+      "indicator_type": "domain",
+      "malware_family": "EvilProxy",
+      "confidence": 89,
+      "last_seen": "2026-08-19T06:44:00Z",
+      "campaigns": ["AiTM Q3"]
+    },
+    {
+      "indicator": "telemetry-sync.example",
+      "indicator_type": "domain",
+      "malware_family": "Suspected C2",
+      "confidence": 44,
+      "last_seen": "2026-08-14T22:01:00Z",
+      "campaigns": []
+    },
+    {
+      "indicator": "invoice-archive.example",
+      "indicator_type": "domain",
+      "malware_family": "AgentTesla",
+      "confidence": 67,
+      "last_seen": "2026-08-12T08:27:00Z",
+      "campaigns": ["Invoice Lure 2026"]
+    },
+    {
+      "indicator": "3d9f1a7c5e2b8d4f6a0c3e9b7d1f5a2c8e4b6d0f9a3c7e1b5d8f2a4c6e0b9d3f",
+      "indicator_type": "sha256",
+      "malware_family": "Emotet",
+      "confidence": 97,
+      "last_seen": "2026-08-17T05:02:00Z",
+      "campaigns": ["TA542 Autumn Wave"]
+    },
+    {
+      "indicator": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "indicator_type": "sha256",
+      "malware_family": "Rhysida",
+      "confidence": 91,
+      "last_seen": "2026-08-15T19:16:00Z",
+      "campaigns": ["Rhysida Health Sector"]
+    },
+    {
+      "indicator": "7e3c9a1f5b8d2e6a0c4f7b1d9e3a5c8f2b6d0a4e8c1f5b9d3a7e2c6f0b4d8a1e",
+      "indicator_type": "sha256",
+      "malware_family": "LummaStealer",
+      "confidence": 85,
+      "last_seen": "2026-08-18T11:48:00Z",
+      "campaigns": ["Lumma Crackware"]
+    },
+    {
+      "indicator": "c4f8b2d6a0e3c7f1b5d9a3e7c1f5b9d3a7e1c5f9b3d7a1e5c9f3b7d1a5e9c3f7",
+      "indicator_type": "sha256",
+      "malware_family": "BlackBasta Loader",
+      "confidence": 93,
+      "last_seen": "2026-08-19T01:29:00Z",
+      "campaigns": ["Basta Q3 Intrusion Set"]
+    },
+    {
+      "indicator": "f0a4c8e2b6d0f4a8c2e6b0d4f8a2c6e0b4d8f2a6c0e4b8d2f6a0c4e8b2d6f0a4",
+      "indicator_type": "sha256",
+      "malware_family": "Benign Test Sample",
+      "confidence": 12,
+      "last_seen": "2026-07-30T15:00:00Z",
+      "campaigns": []
+    }
+  ]
+}

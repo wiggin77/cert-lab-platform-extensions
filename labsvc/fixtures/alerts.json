@@ -1,0 +1,120 @@
+{
+  "_comment": [
+    "Corpus for the mock threat feed. Indicators here line up with fixtures/indicators.json",
+    "so a learner can pivot from an alert in #alerts straight into /threat <indicator>.",
+    "",
+    "alert-006 references 198.51.100.23, which the intel API deliberately 404s. Module 4's",
+    "second check uses it to require graceful handling of a miss."
+  ],
+
+  "alerts": [
+    {
+      "id": "alert-001",
+      "severity": "CRITICAL",
+      "source": "Perimeter IDS",
+      "indicator": "203.0.113.47",
+      "indicatorType": "ipv4",
+      "title": "Emotet C2 beacon observed",
+      "detail": "Host 10.14.22.8 sustained 43 outbound connections to a known Emotet controller in 6 minutes."
+    },
+    {
+      "id": "alert-002",
+      "severity": "CRITICAL",
+      "source": "EDR",
+      "indicator": "c4f8b2d6a0e3c7f1b5d9a3e7c1f5b9d3a7e1c5f9b3d7a1e5c9f3b7d1a5e9c3f7",
+      "indicatorType": "sha256",
+      "title": "Ransomware loader executed",
+      "detail": "BlackBasta loader executed from %TEMP% on FIN-WKS-114 and attempted shadow copy deletion."
+    },
+    {
+      "id": "alert-003",
+      "severity": "CRITICAL",
+      "source": "Identity Provider",
+      "indicator": "secure-login-portal.example",
+      "indicatorType": "domain",
+      "title": "Adversary in the middle phishing portal",
+      "detail": "Nine staff submitted credentials to a proxy portal impersonating the SSO login page."
+    },
+    {
+      "id": "alert-004",
+      "severity": "HIGH",
+      "source": "Proxy Logs",
+      "indicator": "cdn-update-svc.example",
+      "indicatorType": "domain",
+      "title": "Fake browser update delivery",
+      "detail": "SocGholish injection served a fake update prompt to 4 hosts in the marketing subnet."
+    },
+    {
+      "id": "alert-005",
+      "severity": "HIGH",
+      "source": "EDR",
+      "indicator": "7e3c9a1f5b8d2e6a0c4f7b1d9e3a5c8f2b6d0a4e8c1f5b9d3a7e2c6f0b4d8a1e",
+      "indicatorType": "sha256",
+      "title": "Infostealer artefact quarantined",
+      "detail": "LummaStealer sample quarantined on ENG-WKS-070 after clipboard hooking was detected."
+    },
+    {
+      "id": "alert-006",
+      "severity": "HIGH",
+      "source": "Netflow",
+      "indicator": "198.51.100.23",
+      "indicatorType": "ipv4",
+      "title": "Unclassified long lived tunnel",
+      "detail": "A 5 hour encrypted session to an address with no current intel coverage."
+    },
+    {
+      "id": "alert-007",
+      "severity": "HIGH",
+      "source": "Perimeter IDS",
+      "indicator": "203.0.113.112",
+      "indicatorType": "ipv4",
+      "title": "Cobalt Strike named pipe signature",
+      "detail": "Beacon traffic matching a Cobalt Strike malleable profile seen from OPS-SRV-03."
+    },
+    {
+      "id": "alert-008",
+      "severity": "HIGH",
+      "source": "Mail Gateway",
+      "indicator": "invoice-archive.example",
+      "indicatorType": "domain",
+      "title": "Credential lure campaign",
+      "detail": "31 messages carrying an invoice themed lure linking to a staged AgentTesla dropper."
+    },
+    {
+      "id": "alert-009",
+      "severity": "INFO",
+      "source": "Netflow",
+      "indicator": "192.0.2.66",
+      "indicatorType": "ipv4",
+      "title": "Opportunistic port scan",
+      "detail": "Sequential scan across 1024 ports from a low reputation source. No response permitted."
+    },
+    {
+      "id": "alert-010",
+      "severity": "INFO",
+      "source": "Proxy Logs",
+      "indicator": "telemetry-sync.example",
+      "indicatorType": "domain",
+      "title": "Unrecognised telemetry endpoint",
+      "detail": "Low volume periodic callbacks to a domain registered 9 days ago. Benign so far."
+    },
+    {
+      "id": "alert-011",
+      "severity": "INFO",
+      "source": "EDR",
+      "indicator": "f0a4c8e2b6d0f4a8c2e6b0d4f8a2c6e0b4d8f2a6c0e4b8d2f6a0c4e8b2d6f0a4",
+      "indicatorType": "sha256",
+      "title": "EICAR style test detection",
+      "detail": "A test sample tripped the on access scanner during scheduled control validation."
+    },
+    {
+      "id": "alert-012",
+      "severity": "CRITICAL",
+      "source": "EDR",
+      "indicator": "3d9f1a7c5e2b8d4f6a0c3e9b7d1f5a2c8e4b6d0f9a3c7e1b5d8f2a4c6e0b9d3f",
+      "indicatorType": "sha256",
+      "title": "Emotet dropper on a domain controller",
+      "detail": "Dropper executed under a service account on DC-02. Lateral movement attempts followed."
+    }
+  ]
+}

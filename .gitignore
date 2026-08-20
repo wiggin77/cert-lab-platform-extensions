@@ -1,0 +1,4 @@
+# A global core.excludesFile ignores CLAUDE.md. This repo wants it tracked, and patterns
+# in a working tree .gitignore take precedence over the global excludes file, so this
+# negation is enough to bring it back without needing `git add -f` every time.
+!CLAUDE.md
