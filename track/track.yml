@@ -1,0 +1,42 @@
+slug: platform-extensions
+id: n9xgndwcqjvv
+title: Platform Extensions
+teaser: Build a working Mattermost integration, one surface at a time, against a simulated
+  threat alert feed.
+description: |-
+  Hands-on labs for the **Platform Extension Expert** certification.
+
+  A simulated cyber threat intelligence feed posts alerts into Mattermost. Across
+  five labs you extend a single integration codebase to react to those alerts,
+  adding one capability per module that the previous one could not provide:
+
+  1. **Incoming webhooks** format alerts as message attachments
+  2. **Outgoing webhooks** auto-escalate CRITICAL alerts to the incident channel
+  3. **Slash commands** enrich an indicator against a threat intel API
+  4. **Post actions and dialogs** let an analyst escalate with their own judgement
+  5. **Plugins** replace alert rendering entirely, with server and webapp components
+
+  Every lab checks your work by firing a real alert and inspecting what Mattermost
+  actually did with it. A Lab Inspector tab shows you every request in both
+  directions, live, so you can see exactly what Mattermost sent and what your
+  handler returned.
+icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
+tags:
+- integrations
+- webhooks
+- mattermost
+- plugins
+- certification
+owner: mattermost
+developers:
+- doug.lauder@mattermost.com
+idle_timeout: 900
+timelimit: 16200
+lab_config:
+  sidebar_enabled: true
+  feedback_recap_enabled: true
+  feedback_tab_enabled: false
+  loadingMessages: true
+  hideStopButton: false
+checksum: "8084586903652827950"
+enhanced_loading: false

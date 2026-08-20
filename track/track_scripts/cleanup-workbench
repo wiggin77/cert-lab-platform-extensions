@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# Track cleanup. Runs once, after the learner finishes or abandons the track.
+#
+# The sandbox is destroyed straight after this, so there is nothing to tidy for its own
+# sake. What this is for is anything outside the sandbox that would otherwise leak, and
+# capturing the journal while it still exists.
+#
+set -uo pipefail
+
+log() { echo "[cleanup] $*"; }
+
+# Stop the ambient feed first, so nothing new is generated while we are shutting down.
+curl -sf -m 5 -X POST http://localhost:4000/mock/feed/stop >/dev/null 2>&1 || true
+
+# The journal is the only record of what actually happened in this run. If the track is
+# configured to ship diagnostics anywhere, this is the hook for it.
+if [ -f /var/lib/labsvc/journal.jsonl ]; then
+    log "journal contains $(wc -l < /var/lib/labsvc/journal.jsonl) events"
+fi
+
+systemctl stop mm-handler mm-labsvc code-server 2>/dev/null || true
+docker compose -f /opt/lab/docker-compose.yml down -v 2>/dev/null || true
+
+log "cleanup complete"
+exit 0

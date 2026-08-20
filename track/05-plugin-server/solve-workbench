@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#
+# Applies the worked solution for module 6.
+#
+set -euo pipefail
+HANDLER_DIR=/home/learner/handler /opt/lab/variants/apply-variant.sh mod6-server solution
+chown -R learner:learner /home/learner/handler
+exit 0

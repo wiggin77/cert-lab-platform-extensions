@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+#
+# Track setup. Runs once, before the learner gets access.
+#
+# Learners cannot start until this exits 0, so everything slow belongs in a baked image
+# rather than here. See the TODO in config.yml about hot start.
+#
+# Responsibilities:
+#   1. bring up Mattermost and Postgres
+#   2. seed the team, channels, users, bot, and tokens
+#   3. install labsvc and the learner's handler, and start both
+#   4. point the Agents plugin at the mock LLM
+#   5. install the /opt/lab/bin helpers the challenge scripts call
+#
+set -euo pipefail
+
+LAB_ROOT=/opt/lab
+LEARNER_HOME=/home/learner
+LAB_ENV=/etc/lab.env
+
+log() { echo "[setup] $*"; }
+
+# ---------------------------------------------------------------------------
+# 0. Preflight
+# ---------------------------------------------------------------------------
+# Instruqt reports a failed setup script only as "Failed to start track" plus an exit
+# code, so a bare command-not-found tells the author nothing. Check every prerequisite up
+# front and name all of them at once.
+preflight() {
+    local missing=()
+
+    for cmd in docker curl jq node systemctl; do
+        command -v "$cmd" >/dev/null 2>&1 || missing+=("command: ${cmd}")
+    done
+
+    docker compose version >/dev/null 2>&1 || missing+=("docker compose plugin (v2)")
+
+    for path in \
+        "${LAB_ROOT}/docker-compose.yml" \
+        "${LAB_ROOT}/labsvc" \
+        "${LAB_ROOT}/variants" \
+        "${LAB_ROOT}/bin/lab-seed" \
+        "${LAB_ROOT}/bin/lab-configure-agents" \
+        "${LEARNER_HOME}/handler"
+    do
+        [ -e "$path" ] || missing+=("path: ${path}")
+    done
+
+    for unit in mm-labsvc mm-handler code-server; do
+        systemctl list-unit-files "${unit}.service" >/dev/null 2>&1 \
+            && [ -f "/etc/systemd/system/${unit}.service" ] || missing+=("systemd unit: ${unit}.service")
+    done
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "[setup] PREFLIGHT FAILED. The sandbox image is missing provisioning:" >&2
+        printf '[setup]   - %s\n' "${missing[@]}" >&2
+        echo "[setup]" >&2
+        echo "[setup] The VM booted correctly. What is absent is the lab payload," >&2
+        echo "[setup] which either has to be baked into a custom image or fetched here." >&2
+        echo "[setup] See cert-lab/track/README.md, section 'Not built yet'." >&2
+        return 1
+    fi
+    log "preflight OK"
+}
+
+preflight
+
+# ---------------------------------------------------------------------------
+# Wait helper. Every service start below is asynchronous.
+# ---------------------------------------------------------------------------
+wait_for() {
+    local url="$1" name="$2" tries="${3:-60}"
+    log "waiting for ${name}"
+    for _ in $(seq 1 "$tries"); do
+        if curl -sf -m 3 "$url" >/dev/null 2>&1; then
+            log "${name} is up"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "[setup] FAILED: ${name} did not come up at ${url}" >&2
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# 1. Mattermost and Postgres
+# ---------------------------------------------------------------------------
+log "starting Mattermost and Postgres"
+docker compose -f "${LAB_ROOT}/docker-compose.yml" up -d
+wait_for http://localhost:8065/api/v4/system/ping "Mattermost" 120
+
+# ---------------------------------------------------------------------------
+# 2. Seed. Writes the ids and tokens it creates into LAB_ENV.
+# ---------------------------------------------------------------------------
+log "seeding team, channels, users, and tokens"
+"${LAB_ROOT}/bin/lab-seed"
+
+# shellcheck disable=SC1090
+source "${LAB_ENV}"
+
+# ---------------------------------------------------------------------------
+# 3. Mattermost server settings the curriculum depends on
+# ---------------------------------------------------------------------------
+# The lesson in Module 4 is a 5 second slash command timeout. That value is
+# configurable and defaults to far longer, so set it here to make the lesson true rather
+# than merely asserted. See channels/app/command.go in the mattermost repo.
+log "setting OutgoingIntegrationRequestsTimeout to 5s"
+curl -sf -X PUT http://localhost:8065/api/v4/config/patch \
+    -H "Authorization: Bearer ${MM_ADMIN_TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d '{
+          "ServiceSettings": {
+            "OutgoingIntegrationRequestsTimeout": 5,
+            "EnableIncomingWebhooks": true,
+            "EnableOutgoingWebhooks": true,
+            "EnableCommands": true,
+            "EnablePostUsernameOverride": true,
+            "EnablePostIconOverride": true,
+            "AllowedUntrustedInternalConnections": "workbench localhost 127.0.0.1"
+          }
+        }' >/dev/null
+log "config patched"
+
+# AllowedUntrustedInternalConnections is not optional. Without it Mattermost refuses to
+# call labsvc at all, because the target resolves to a private address, and every
+# integration in the track silently fails.
+
+# ---------------------------------------------------------------------------
+# 4. Agents plugin against the mock LLM
+# ---------------------------------------------------------------------------
+# The Agents plugin rejects a blank API key even for local OpenAI compatible services,
+# so a dummy non-empty value is required here.
+log "configuring the Agents plugin against the mock LLM"
+"${LAB_ROOT}/bin/lab-configure-agents" || log "WARNING: Agents configuration failed, Module 6 AI skills will not work"
+
+# ---------------------------------------------------------------------------
+# 5. Services
+# ---------------------------------------------------------------------------
+log "starting labsvc and the learner handler"
+systemctl enable --now mm-labsvc
+wait_for http://localhost:4000/healthz "labsvc" 60
+
+systemctl enable --now mm-handler
+wait_for http://localhost:3000/healthz "handler" 60
+
+systemctl enable --now code-server
+wait_for http://localhost:8080/ "code-server" 60
+
+chown -R learner:learner "${LEARNER_HOME}"
+
+log "setup complete"
+exit 0

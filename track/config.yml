@@ -1,0 +1,30 @@
+version: "3"
+
+# One VM host rather than a container, because Module 6 needs the Go toolchain, Node,
+# webpack, and Docker together. See DESIGN.md section 3.
+#
+# instruqt/docker-28-3 ships Docker pre-installed and, importantly, a Docker Hub registry
+# mirror, which makes pulling the Mattermost image much faster than from a stock Ubuntu
+# base. A plain ubuntu-2204-lts image boots fine but has no Docker, which is what made
+# the first run fail with "docker: command not found".
+#
+# TODO before the track goes live: replace this with a baked custom image carrying
+# Mattermost, Postgres, node_modules, the Go module cache, and a pre-built plugin bundle,
+# then enable hot start. The curriculum budgets a 3 to 4 minute wait screen for Module 6's
+# npm install plus webpack build. A snapshot removes essentially all of it, which is the
+# largest single UX win available in this track. Until then, track setup does the work at
+# runtime and learners wait.
+virtualmachines:
+- name: workbench
+  image: instruqt/docker-28-3
+  shell: /bin/bash
+  machine_type: n1-standard-4
+  ports:
+  # Mattermost
+  - 8065
+  # labsvc: recording proxy, mock services, grader, inspector
+  - 4000
+  # the learner's handler
+  - 3000
+  # code-server
+  - 8080

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#
+# Switches the lab to module 6.
+#
+# LAB_MODULE selects the mock feed's transport and tags journal events, and the switch
+# takes a snapshot so this challenge's cleanup has a watermark to reset to.
+#
+set -euo pipefail
+/opt/lab/labsvc/scripts/lab-module.sh 6
+exit 0
