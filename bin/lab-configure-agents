@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+#
+# Installs the Mattermost Agents plugin and points it at the lab's mock LLM.
+#
+# The mock LLM is OpenAI compatible and deterministic, which is what keeps an API key out
+# of a public sandbox, removes per-learner token cost, works offline, and gives the
+# Module 6 grader text it can assert against. See DESIGN.md section 5.3.
+#
+# The config shape below is taken from the plugin source at v2.4.3
+# (config/config.go and llm/configuration.go), not from documentation:
+#
+#   Config.services[] -> llm.ServiceConfig { id, name, type, apiKey, apiURL, defaultModel }
+#   Config.bots[]     -> llm.BotConfig     { id, name, displayName, serviceID, ... }
+#
+# Non-fatal by design. Track setup tolerates a failure here, because everything except
+# Module 6's AI skills still works without it.
+#
+set -euo pipefail
+SCRIPT_NAME=lab-configure-agents
+# shellcheck source=lab-common.sh
+source "$(dirname "$(readlink -f "$0")")/lab-common.sh"
+
+PLUGIN_ID=mattermost-ai
+PLUGIN_VERSION="${AGENTS_VERSION:-v2.4.3}"
+# The release also publishes -fips builds. Use the plain linux-amd64 archive.
+PLUGIN_URL="https://github.com/mattermost/mattermost-plugin-agents/releases/download/${PLUGIN_VERSION}/mattermost-plugin-agents-${PLUGIN_VERSION}-linux-amd64.tar.gz"
+
+SERVICE_ID=lab-mock-llm
+BOT_NAME=threat-analyst
+MOCK_LLM_URL="${LABSVC_PUBLIC_BASE_URL:-http://workbench:4000}/mock/llm/v1"
+
+MM_ADMIN_TOKEN="${MM_ADMIN_TOKEN:-$(lab_env_get MM_ADMIN_TOKEN || true)}"
+[ -n "$MM_ADMIN_TOKEN" ] || die "MM_ADMIN_TOKEN not available. Run lab-seed first."
+export MM_ADMIN_TOKEN
+
+wait_for_mattermost 60
+
+# ---------------------------------------------------------------------------
+# 1. Install
+# ---------------------------------------------------------------------------
+if mm GET "/plugins" | grep -q "\"${PLUGIN_ID}\""; then
+    log "${PLUGIN_ID} already installed"
+else
+    log "downloading Agents ${PLUGIN_VERSION}"
+    tmp=$(mktemp -d)
+    curl -fsSL "$PLUGIN_URL" -o "${tmp}/agents.tar.gz" \
+        || die "could not download ${PLUGIN_URL}"
+
+    log "uploading the plugin ($(du -h "${tmp}/agents.tar.gz" | cut -f1))"
+    curl -sS -m 300 -X POST "${MM}/api/v4/plugins" \
+        -H "Authorization: Bearer ${MM_ADMIN_TOKEN}" \
+        -F "plugin=@${tmp}/agents.tar.gz" -F 'force=true' >/dev/null \
+        || die "plugin upload failed"
+    rm -rf "$tmp"
+fi
+
+log "enabling ${PLUGIN_ID}"
+mm POST "/plugins/${PLUGIN_ID}/enable" >/dev/null || warn "enable returned an error, continuing"
+
+# ---------------------------------------------------------------------------
+# 2. Configure
+# ---------------------------------------------------------------------------
+# apiKey must be non-empty. The Agents plugin rejects a blank key even for a local,
+# OpenAI compatible service, which fails every model fetch and inference call with a
+# "No valid keys" error. The value itself is never checked by the mock.
+log "pointing Agents at ${MOCK_LLM_URL}"
+
+read -r -d '' PLUGIN_CONFIG <<JSON || true
+{
+  "services": [
+    {
+      "id": "${SERVICE_ID}",
+      "name": "Lab Mock LLM",
+      "type": "openaicompatible",
+      "apiURL": "${MOCK_LLM_URL}",
+      "apiKey": "lab-dummy-key-must-not-be-blank",
+      "defaultModel": "lab-threat-analyst-v1",
+      "tokenLimit": 8192
+    }
+  ],
+  "bots": [
+    {
+      "id": "${BOT_NAME}",
+      "name": "${BOT_NAME}",
+      "displayName": "Threat Analyst",
+      "serviceID": "${SERVICE_ID}",
+      "customInstructions": "You are a security operations analyst assistant. Be concise and specific.",
+      "model": "lab-threat-analyst-v1",
+      "enableVision": false,
+      "disableTools": true,
+      "channelAccessLevel": 0,
+      "userAccessLevel": 0
+    }
+  ],
+  "defaultBotName": "${BOT_NAME}",
+  "allowedUpstreamHostnames": "workbench",
+  "enableCallSummary": false,
+  "enableTokenUsageLogging": false
+}
+JSON
+
+# Nest the plugin config under PluginSettings.Plugins.<id> and validate it as JSON on the
+# way through, so a typo in the heredoc fails here rather than silently half-configuring
+# the plugin.
+BODY=$(PLUGIN_CONFIG="$PLUGIN_CONFIG" python3 - "$PLUGIN_ID" <<'PY'
+import json, os, sys
+cfg = json.loads(os.environ["PLUGIN_CONFIG"])
+print(json.dumps({"PluginSettings": {"Plugins": {sys.argv[1]: cfg}}}))
+PY
+) || die "the plugin configuration is not valid JSON"
+
+mm PUT /config/patch "$BODY" >/dev/null || die "could not write the Agents plugin configuration"
+
+# A config change does not always reload plugin state cleanly, so bounce it.
+mm POST "/plugins/${PLUGIN_ID}/disable" >/dev/null || true
+sleep 2
+mm POST "/plugins/${PLUGIN_ID}/enable" >/dev/null || warn "re-enable failed"
+
+# ---------------------------------------------------------------------------
+# 3. Verify the mock is actually reachable and answering
+# ---------------------------------------------------------------------------
+if curl -sf -m 10 "${LABSVC}/mock/llm/v1/models" >/dev/null 2>&1; then
+    log "mock LLM is serving /models"
+else
+    warn "mock LLM did not answer at ${LABSVC}/mock/llm/v1/models. Is mm-labsvc running?"
+fi
+
+log "Agents configured against the mock LLM"

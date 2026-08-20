@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# Registers a Mattermost integration token with the learner's handler.
+#
+#   sudo lab-set-token outgoing '<outgoing webhook token>'   Module 3
+#   sudo lab-set-token command  '<slash command token>'      Module 4
+#
+# Mattermost generates these when the learner creates the integration, so they cannot be
+# baked in. The handler compares the token on every request, which is the entire security
+# model for these two surfaces: there is no signature to verify.
+#
+set -euo pipefail
+SCRIPT_NAME=lab-set-token
+# shellcheck source=lab-common.sh
+source "$(dirname "$(readlink -f "$0")")/lab-common.sh"
+
+require_root "$@"
+
+KIND="${1:-}"
+TOKEN="${2:-}"
+
+case "$KIND" in
+    outgoing) VAR=MM_OUTGOING_WEBHOOK_TOKEN ;;
+    command)  VAR=MM_COMMAND_TOKEN ;;
+    *) die "usage: sudo lab-set-token <outgoing|command> '<token>'" ;;
+esac
+
+[ -n "$TOKEN" ] || die "usage: sudo lab-set-token ${KIND} '<token>'"
+
+TOKEN=$(printf '%s' "$TOKEN" | tr -d '[:space:]' | sed "s/^['\"]//; s/['\"]$//")
+
+# Mattermost tokens are 26 character lowercase alphanumeric ids. Catching a truncated
+# paste here is much kinder than letting the handler reject every request silently.
+if ! printf '%s' "$TOKEN" | grep -qE '^[a-z0-9]{26}$'; then
+    warn "that does not look like a Mattermost token (expected 26 lowercase alphanumeric characters, got ${#TOKEN})."
+    warn "Registering it anyway, but check you copied the Token field and not the webhook URL or id."
+fi
+
+lab_env_set "$VAR" "$TOKEN"
+log "set ${VAR}"
+
+log "restarting the handler"
+systemctl restart mm-handler
+
+for _ in $(seq 1 30); do
+    curl -sf -m 2 http://localhost:3000/healthz >/dev/null 2>&1 && break
+    sleep 1
+done
+curl -sf -m 2 http://localhost:3000/healthz >/dev/null 2>&1 \
+    || die "mm-handler did not come back up. Check: journalctl -u mm-handler -n 50"
+
+log "done"

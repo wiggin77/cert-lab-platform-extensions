@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+#
+# Seeds Mattermost for the lab and writes the ids and tokens it creates to /etc/lab.env.
+#
+# Creates:
+#   labadmin        system admin, exists only so the grader has a token the learner cannot
+#                   invalidate by logging out
+#   analyst         the learner's account, also system admin so the Integrations menu and
+#                   plugin uploads are available without permission wrangling
+#   team `soc`      with channels ~alerts and ~incidents
+#   threat-feed     bot, used by the labsvc mock feed
+#   soc-handler     bot, used by the learner's handler
+#
+# Idempotent: re-running is safe, existing objects are looked up rather than recreated.
+#
+set -euo pipefail
+SCRIPT_NAME=lab-seed
+# shellcheck source=lab-common.sh
+source "$(dirname "$(readlink -f "$0")")/lab-common.sh"
+
+require_root
+
+TEAM_NAME="${LAB_TEAM_NAME:-soc}"
+TEAM_DISPLAY="Security Operations"
+ADMIN_USER=labadmin
+ADMIN_EMAIL=labadmin@lab.local
+ANALYST_USER="${LAB_ANALYST_USER:-analyst}"
+ANALYST_EMAIL=analyst@lab.local
+# Fixed rather than generated: the learner has to type it, and the sandbox is ephemeral
+# and reachable only through their own Instruqt session.
+ANALYST_PASS="${LAB_ANALYST_PASS:-Password123!}"
+ADMIN_PASS="${LAB_ADMIN_PASS:-LabAdmin123!}"
+
+wait_for_mattermost 150
+
+# ---------------------------------------------------------------------------
+# 1. Admin account and token
+# ---------------------------------------------------------------------------
+# The first user created on a fresh install becomes system admin, and that call needs no
+# auth. If the account already exists this 4xxs, which is fine.
+log "creating ${ADMIN_USER}"
+curl -sS -m 30 -X POST "${MM}/api/v4/users" \
+    -H 'Content-Type: application/json' \
+    -d "{\"email\":\"${ADMIN_EMAIL}\",\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}" \
+    >/dev/null 2>&1 || true
+
+log "logging in as ${ADMIN_USER}"
+LOGIN_HEADERS=$(mktemp)
+curl -sS -m 30 -D "$LOGIN_HEADERS" -o /dev/null -X POST "${MM}/api/v4/users/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"login_id\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}"
+
+MM_ADMIN_TOKEN=$(grep -i '^token:' "$LOGIN_HEADERS" | tr -d '\r' | awk '{print $2}')
+rm -f "$LOGIN_HEADERS"
+[ -n "$MM_ADMIN_TOKEN" ] || die "login as ${ADMIN_USER} produced no session token"
+export MM_ADMIN_TOKEN
+log "admin token acquired"
+
+# ---------------------------------------------------------------------------
+# 2. Team
+# ---------------------------------------------------------------------------
+log "creating team ${TEAM_NAME}"
+mm_ok_if_exists POST /teams \
+    "{\"name\":\"${TEAM_NAME}\",\"display_name\":\"${TEAM_DISPLAY}\",\"type\":\"O\"}" >/dev/null
+
+TEAM_ID=$(mm GET "/teams/name/${TEAM_NAME}" | json_get id)
+[ -n "$TEAM_ID" ] || die "could not resolve team ${TEAM_NAME}"
+log "team id ${TEAM_ID}"
+
+# ---------------------------------------------------------------------------
+# 3. Channels
+# ---------------------------------------------------------------------------
+create_channel() {
+    local name="$1" display="$2" purpose="$3"
+    mm_ok_if_exists POST /channels \
+        "{\"team_id\":\"${TEAM_ID}\",\"name\":\"${name}\",\"display_name\":\"${display}\",\"type\":\"O\",\"purpose\":\"${purpose}\"}" >/dev/null
+    mm GET "/teams/${TEAM_ID}/channels/name/${name}" | json_get id
+}
+
+ALERTS_ID=$(create_channel alerts "Alerts" "Incoming threat intelligence alerts")
+INCIDENTS_ID=$(create_channel incidents "Incidents" "Escalated alerts for the on-call team")
+[ -n "$ALERTS_ID" ] && [ -n "$INCIDENTS_ID" ] || die "could not create or resolve the lab channels"
+log "channels: alerts=${ALERTS_ID} incidents=${INCIDENTS_ID}"
+
+# ---------------------------------------------------------------------------
+# 4. Users
+# ---------------------------------------------------------------------------
+add_to_team_and_channels() {
+    local user_id="$1"
+    mm_ok_if_exists POST "/teams/${TEAM_ID}/members" \
+        "{\"team_id\":\"${TEAM_ID}\",\"user_id\":\"${user_id}\"}" >/dev/null
+    for ch in "$ALERTS_ID" "$INCIDENTS_ID"; do
+        mm_ok_if_exists POST "/channels/${ch}/members" "{\"user_id\":\"${user_id}\"}" >/dev/null
+    done
+}
+
+log "creating ${ANALYST_USER}"
+mm_ok_if_exists POST /users \
+    "{\"email\":\"${ANALYST_EMAIL}\",\"username\":\"${ANALYST_USER}\",\"password\":\"${ANALYST_PASS}\"}" >/dev/null
+ANALYST_ID=$(mm GET "/users/username/${ANALYST_USER}" | json_get id)
+[ -n "$ANALYST_ID" ] || die "could not resolve ${ANALYST_USER}"
+
+# System admin so Integrations and plugin uploads are available. The learner configures
+# webhooks, slash commands, and uploads a plugin, all of which need it.
+mm PUT "/users/${ANALYST_ID}/roles" '{"roles":"system_user system_admin"}' >/dev/null
+add_to_team_and_channels "$ANALYST_ID"
+
+ADMIN_ID=$(mm GET "/users/username/${ADMIN_USER}" | json_get id)
+add_to_team_and_channels "$ADMIN_ID"
+
+# Skip the product tour and onboarding modals. They are pure lab-time tax.
+mm PUT "/users/${ANALYST_ID}/preferences" "$(cat <<EOF
+[{"user_id":"${ANALYST_ID}","category":"tutorial_step","name":"${ANALYST_ID}","value":"999"},
+ {"user_id":"${ANALYST_ID}","category":"onboarding_task_list","name":"onboarding_task_list_show","value":"false"},
+ {"user_id":"${ANALYST_ID}","category":"onboarding_task_list","name":"onboarding_task_list_open","value":"false"},
+ {"user_id":"${ANALYST_ID}","category":"drafts","name":"drafts_tour_tip_showed","value":"{\\"drafts_tour_tip_showed\\":true}"}]
+EOF
+)" >/dev/null || warn "could not set onboarding preferences, the learner will see the product tour"
+
+# ---------------------------------------------------------------------------
+# 5. Bots
+# ---------------------------------------------------------------------------
+create_bot() {
+    local username="$1" display="$2" description="$3"
+    mm_ok_if_exists POST /bots \
+        "{\"username\":\"${username}\",\"display_name\":\"${display}\",\"description\":\"${description}\"}" >/dev/null
+    mm GET "/users/username/${username}" | json_get id
+}
+
+create_bot_token() {
+    local user_id="$1" description="$2"
+    mm POST "/users/${user_id}/tokens" "{\"description\":\"${description}\"}" | json_get token
+}
+
+log "creating bots"
+FEED_BOT_ID=$(create_bot threat-feed "Threat Feed" "Simulated threat intelligence feed")
+HANDLER_BOT_ID=$(create_bot soc-handler "SOC Handler" "The learner's integration handler")
+[ -n "$FEED_BOT_ID" ] && [ -n "$HANDLER_BOT_ID" ] || die "bot creation failed. Is EnableBotAccountCreation set?"
+
+add_to_team_and_channels "$FEED_BOT_ID"
+add_to_team_and_channels "$HANDLER_BOT_ID"
+
+FEED_BOT_TOKEN=$(create_bot_token "$FEED_BOT_ID" "labsvc mock feed")
+HANDLER_BOT_TOKEN=$(create_bot_token "$HANDLER_BOT_ID" "learner handler")
+[ -n "$FEED_BOT_TOKEN" ] && [ -n "$HANDLER_BOT_TOKEN" ] || die "bot token creation failed. Is EnableUserAccessTokens set?"
+
+# ---------------------------------------------------------------------------
+# 6. Write the environment
+# ---------------------------------------------------------------------------
+log "writing ${LAB_ENV}"
+lab_env_set MM_ADMIN_TOKEN        "$MM_ADMIN_TOKEN"
+lab_env_set MM_FEED_BOT_TOKEN     "$FEED_BOT_TOKEN"
+lab_env_set MM_BOT_TOKEN          "$HANDLER_BOT_TOKEN"
+lab_env_set MM_TEAM_ID            "$TEAM_ID"
+lab_env_set MM_TEAM_NAME          "$TEAM_NAME"
+lab_env_set MM_ALERTS_CHANNEL_ID  "$ALERTS_ID"
+lab_env_set MM_INCIDENTS_CHANNEL_ID "$INCIDENTS_ID"
+lab_env_set LAB_PLUGIN_ID         "${LAB_PLUGIN_ID:-com.mattermost.cert-alerts}"
+
+# Module 2 only. The learner supplies this with lab-set-webhook once they have created the
+# webhook, so seed it empty rather than leaving the variable undefined.
+grep -q '^MM_FEED_INCOMING_WEBHOOK_URL=' "$LAB_ENV" || lab_env_set MM_FEED_INCOMING_WEBHOOK_URL ""
+grep -q '^MM_OUTGOING_WEBHOOK_TOKEN='   "$LAB_ENV" || lab_env_set MM_OUTGOING_WEBHOOK_TOKEN ""
+grep -q '^MM_COMMAND_TOKEN='            "$LAB_ENV" || lab_env_set MM_COMMAND_TOKEN ""
+
+chmod 0640 "$LAB_ENV"
+
+cat <<EOF
+
+  ============================================================
+   Mattermost sign in
+     URL:      ${MM}
+     Username: ${ANALYST_USER}
+     Password: ${ANALYST_PASS}
+  ============================================================
+
+EOF
+log "seed complete"

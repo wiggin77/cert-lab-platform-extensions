@@ -1,27 +1,84 @@
 version: "3"
 
-# One VM host rather than a container, because Module 6 needs the Go toolchain, Node,
-# webpack, and Docker together. See DESIGN.md section 3.
+# Hybrid topology, chosen from empirical testing on a scratch track. See DESIGN.md.
 #
-# instruqt/docker-28-3 ships Docker pre-installed and, importantly, a Docker Hub registry
-# mirror, which makes pulling the Mattermost image much faster than from a stock Ubuntu
-# base. A plain ubuntu-2204-lts image boots fine but has no Docker, which is what made
-# the first run fail with "docker: command not found".
+# Mattermost and Postgres are containers: official images, zero build, and the platform
+# keeps them isolated from anything the learner breaks.
 #
-# TODO before the track goes live: replace this with a baked custom image carrying
-# Mattermost, Postgres, node_modules, the Go module cache, and a pre-built plugin bundle,
-# then enable hot start. The curriculum budgets a 3 to 4 minute wait screen for Module 6's
-# npm install plus webpack build. A snapshot removes essentially all of it, which is the
-# largest single UX win available in this track. Until then, track setup does the work at
-# runtime and learners wait.
+# The learner's mutable code stays on a VM. Container hosts have no persistent storage on
+# classic Tracks (a `volumes:` entry validates and is then silently ignored, verified by
+# probe), so learner-authored code in a container would live on an overlay filesystem and
+# be lost if the pod restarted. A VM disk survives a process restart. The VM also carries
+# the Go and Node toolchains that Module 6 needs regardless.
+#
+# Two constraints found by testing, both undocumented and both silent when violated:
+#
+#   1. Base images must be Debian-family. Instruqt injects its own sandbox-agent as PID 1
+#      and an Alpine/musl image (nicolaka/netshoot) failed to provision with an SSH
+#      handshake error. This is why postgres is not the -alpine tag.
+#
+#   2. Instruqt ignores the image's WORKDIR and runs from /. Mattermost's plugin paths are
+#      relative by default, so plugin startup fails with
+#      "mkdir ./client/plugins: no such file or directory". That would have broken all of
+#      Module 6, as a warning in a log rather than a crash. The MM_PLUGINSETTINGS_*
+#      variables below pin them absolutely.
+
+containers:
+- name: postgres
+  image: postgres:15
+  memory: 1024
+  environment:
+    POSTGRES_USER: mmuser
+    POSTGRES_PASSWORD: mmuser_password
+    POSTGRES_DB: mattermost
+
+- name: mattermost
+  image: mattermost/mattermost-team-edition:10.5
+  memory: 2048
+  ports:
+  - 8065
+  environment:
+    MM_SQLSETTINGS_DRIVERNAME: postgres
+    MM_SQLSETTINGS_DATASOURCE: "postgres://mmuser:mmuser_password@postgres:5432/mattermost?sslmode=disable&connect_timeout=10"
+    MM_SERVICESETTINGS_SITEURL: http://mattermost:8065
+
+    # Required. See constraint 2 above.
+    MM_PLUGINSETTINGS_DIRECTORY: /mattermost/plugins
+    MM_PLUGINSETTINGS_CLIENTDIRECTORY: /mattermost/client/plugins
+    MM_PLUGINSETTINGS_ENABLE: "true"
+    MM_PLUGINSETTINGS_ENABLEUPLOADS: "true"
+
+    # Mattermost calls labsvc on the VM, which resolves to a private address. Without
+    # this it refuses the connection and every integration in the track fails silently.
+    MM_SERVICESETTINGS_ALLOWEDUNTRUSTEDINTERNALCONNECTIONS: "workbench localhost 127.0.0.1"
+
+    # Makes the curriculum's "5-second timeout" lesson in Module 4 literally true. The
+    # default is far longer.
+    MM_SERVICESETTINGS_OUTGOINGINTEGRATIONREQUESTSTIMEOUT: "5"
+
+    MM_SERVICESETTINGS_ENABLEINCOMINGWEBHOOKS: "true"
+    MM_SERVICESETTINGS_ENABLEOUTGOINGWEBHOOKS: "true"
+    MM_SERVICESETTINGS_ENABLECOMMANDS: "true"
+    MM_SERVICESETTINGS_ENABLEPOSTUSERNAMEOVERRIDE: "true"
+    MM_SERVICESETTINGS_ENABLEPOSTICONOVERRIDE: "true"
+
+    # lab-seed creates bot accounts and personal access tokens. Both are off by default,
+    # and both fail with a permissions error rather than anything descriptive.
+    MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION: "true"
+    MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS: "true"
+
 virtualmachines:
 - name: workbench
-  image: instruqt/docker-28-3
+  # Docker is no longer needed here now that Mattermost and Postgres are containers, so a
+  # stock Ubuntu base is enough. Verified to boot and run lifecycle scripts.
+  #
+  # TODO: bake a custom image with the toolchains and node_modules pre-installed. Until
+  # then track setup installs them at runtime, which hot start absorbs because hot start
+  # runs track-level setup during pre-warm.
+  image: ubuntu-os-cloud/ubuntu-2204-lts
   shell: /bin/bash
-  machine_type: n1-standard-4
+  machine_type: n1-standard-2
   ports:
-  # Mattermost
-  - 8065
   # labsvc: recording proxy, mock services, grader, inspector
   - 4000
   # the learner's handler

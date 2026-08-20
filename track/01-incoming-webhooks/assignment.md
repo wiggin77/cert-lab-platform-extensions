@@ -18,7 +18,7 @@ tabs:
 - id: 2lq9umknucov
   title: Mattermost
   type: service
-  hostname: workbench
+  hostname: mattermost
   port: 8065
 - id: 6xlnq463x5pz
   title: Editor
@@ -46,10 +46,22 @@ dialog. For pushing alerts in, it is exactly the right tool.
 
 # Your task
 
-## 1. Create the incoming webhook
+## 1. Sign in to Mattermost
 
-In the **Mattermost** tab, go to the main menu, then **Integrations > Incoming Webhooks >
-Add Incoming Webhook**. Set the channel to **~alerts** and save.
+Open the **Mattermost** tab and sign in:
+
+| | |
+|---|---|
+| Username | `analyst` |
+| Password | `Password123!` |
+
+You have system admin rights, so the Integrations menu is available. The same account is
+used for every challenge in the track.
+
+## 2. Create the incoming webhook
+
+From the main menu, go to **Integrations > Incoming Webhooks > Add Incoming Webhook**. Set
+the channel to **~alerts** and save.
 
 Copy the resulting URL, then register it with the feed:
 
@@ -57,7 +69,7 @@ Copy the resulting URL, then register it with the feed:
 sudo lab-set-webhook '<paste the URL here>'
 ```
 
-## 2. Format the payload
+## 3. Format the payload
 
 Open the **Editor** tab and edit `src/payloads/alert-payload.ts`. The feed calls
 `buildAlertPayload()` for every alert and posts whatever you return.
@@ -71,7 +83,7 @@ Return a message **attachment** carrying:
 Helpers are available in `src/lib/attachments.ts` if you want them. Writing the object
 by hand is equally fine.
 
-## 3. Watch it arrive
+## 4. Watch it arrive
 
 ```bash
 fire-alert.sh --severity CRITICAL

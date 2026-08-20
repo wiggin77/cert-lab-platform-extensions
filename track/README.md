@@ -62,31 +62,75 @@ typechecked, runnable locally, and testable without pushing a track.
   snapshot. Without it, later challenges trip over earlier experimentation.
 - `solve-workbench` calls `apply-variant.sh`.
 
-## Paths assumed on the host
+## Topology
 
-Track setup must place things here, or the challenge scripts will not find them.
+Three hosts, chosen from empirical testing on a scratch track. `config.yml` carries the
+full reasoning.
+
+| Host | Type | Runs |
+| --- | --- | --- |
+| `postgres` | container | `postgres:15`, official image |
+| `mattermost` | container | `mattermost/mattermost-team-edition:10.5`, official image |
+| `workbench` | VM | labsvc, the learner's handler, code-server, and the Go/Node toolchains |
+
+Mattermost and Postgres are containers because the official images work unmodified and the
+platform keeps them away from anything the learner breaks. The learner's mutable code is on
+a VM because container hosts have **no persistent storage** on classic Tracks: a `volumes:`
+entry validates and is then silently ignored, so learner-authored code in a container would
+be lost on a pod restart.
+
+Two undocumented constraints, both silent when violated:
+
+- **Base images must be Debian-family.** An Alpine/musl image fails to provision with an
+  SSH handshake error, because Instruqt injects its own `sandbox-agent` as PID 1.
+- **Instruqt ignores the image's `WORKDIR`** and runs from `/`. Mattermost's plugin paths
+  are relative, so plugin startup fails with `mkdir ./client/plugins`. That would break all
+  of Module 6, as a log warning rather than a crash. `config.yml` pins them absolutely.
+
+## Paths on the workbench VM
+
+Track setup clones <https://github.com/wiggin77/cert-lab-platform-extensions> to
+`/opt/lab`, so the challenge scripts find things here.
 
 | Path | Contents |
 | --- | --- |
 | `/opt/lab/labsvc/` | the labsvc package, including `scripts/` |
 | `/opt/lab/variants/` | solution overlays and `apply-variant.sh` |
-| `/opt/lab/docker-compose.yml` | Mattermost and Postgres |
 | `/opt/lab/bin/` | `lab-seed`, `lab-configure-agents`, `lab-set-webhook`, `lab-set-token` |
 | `/etc/lab.env` | environment shared by `mm-labsvc` and `mm-handler` |
-| `/home/learner/handler/` | the learner's handler, modules 2 to 5 |
+| `/home/learner/handler/` | the learner's own copy, modules 2 to 5 |
 | `/home/learner/plugin/` | the plugin scaffold, module 6 |
 
-`mm-labsvc`, `mm-handler`, and `code-server` are systemd units.
+`/opt/lab` stays pristine. The learner works in a copy, which is what lets a reset restore
+from it and keeps grading code out of a directory they can edit.
+
+`mm-labsvc`, `mm-handler`, and `code-server@learner` are systemd units written by track
+setup. Override the clone source with `LAB_REPO_URL` and `LAB_REPO_REF` when testing a
+branch.
+
+## Sign in
+
+`lab-seed` creates `analyst` / `Password123!` as a system admin, which is what the first
+assignment tells the learner to use. System admin because they configure integrations and
+upload a plugin. A separate `labadmin` account exists purely so the grader holds a token
+the learner cannot invalidate by logging out.
 
 ## Not built yet
 
-- The VM image. `config.yml` points at a stock `ubuntu-2204-lts` with a TODO. It needs a
-  baked custom image with Mattermost, Postgres, `node_modules`, the Go module cache, and
-  a pre-built plugin bundle, plus hot start enabled. The curriculum budgets a 3 to 4
-  minute wait screen for Module 6's build; a snapshot removes almost all of it.
-- Provisioning: `docker-compose.yml`, the systemd units, and the `/opt/lab/bin` helpers
-  the setup script and the assignments reference (`lab-seed`,
-  `lab-configure-agents`, `lab-set-webhook`, `lab-set-token`).
-- Solution variants for modules 4, 5, and 6, so four of the six `solve-workbench`
-  scripts will fail until those land.
+- Solution variants for modules 4, 5, and 6, so four of the six `solve-workbench` scripts
+  will fail until those land.
 - The Module 6 plugin scaffold.
+- A baked VM image. Setup installs Node and Go at runtime, which hot start absorbs because
+  hot start runs track-level setup during pre-warm. Baking would remove it entirely.
+
+## Deploying a change
+
+Track setup clones the repo at run time, so **code changes need pushing to GitHub before a
+track run picks them up**. Pushing the track alone only updates config and assignments.
+
+```bash
+git push                       # code: labsvc, handler, bin, variants
+cd track && instruqt track push  # config, assignments, lifecycle scripts
+```
+
+Point a test run at a branch with `LAB_REPO_REF` rather than editing the setup script.

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#
+# Registers the learner's incoming webhook URL with the mock threat feed. Module 2.
+#
+#   sudo lab-set-webhook 'http://mattermost:8065/hooks/xxxxxxxxxxxxxxxxxxxxxxxxxx'
+#
+# The learner creates the webhook in Mattermost, which is the whole lesson, so the URL
+# cannot be known ahead of time. This is how it reaches the feed.
+#
+set -euo pipefail
+SCRIPT_NAME=lab-set-webhook
+# shellcheck source=lab-common.sh
+source "$(dirname "$(readlink -f "$0")")/lab-common.sh"
+
+require_root "$@"
+
+URL="${1:-}"
+[ -n "$URL" ] || die "usage: sudo lab-set-webhook '<incoming webhook URL>'"
+
+# Strip the whitespace and quotes that survive a copy out of the Mattermost UI.
+URL=$(printf '%s' "$URL" | tr -d '[:space:]' | sed "s/^['\"]//; s/['\"]$//")
+
+case "$URL" in
+    */hooks/*) ;;
+    *) die "that does not look like an incoming webhook URL. Expected something ending in /hooks/<id>, got: ${URL}" ;;
+esac
+
+# The browser shows a public play.instruqt.com address, but the feed calls this from the
+# workbench VM, so it needs the internal hostname. Rewrite rather than reject: the learner
+# has no way to know this and the failure would be silent.
+if printf '%s' "$URL" | grep -q 'env.play.instruqt.com'; then
+    HOOK_ID=${URL##*/hooks/}
+    URL="${MM}/hooks/${HOOK_ID}"
+    log "rewrote the browser URL to the internal address: ${URL}"
+fi
+
+log "checking the webhook responds"
+CODE=$(curl -sS -o /dev/null -w '%{http_code}' -m 10 -X POST "$URL" \
+    -H 'Content-Type: application/json' \
+    -d '{"text":"Lab check: incoming webhook registered."}' || echo 000)
+
+case "$CODE" in
+    2*) log "webhook accepted a test post (HTTP ${CODE}). Check ~alerts, you should see it." ;;
+    404) die "Mattermost returned 404. The webhook id is wrong, or the webhook was deleted." ;;
+    000) die "could not reach ${URL} at all. Is the hostname right?" ;;
+    *)   warn "the webhook returned HTTP ${CODE}. Registering it anyway." ;;
+esac
+
+lab_env_set MM_FEED_INCOMING_WEBHOOK_URL "$URL"
+log "restarting the lab service"
+systemctl restart mm-labsvc
+
+for _ in $(seq 1 30); do
+    curl -sf -m 2 "${LABSVC}/healthz" >/dev/null 2>&1 && break
+    sleep 1
+done
+curl -sf -m 2 "${LABSVC}/healthz" >/dev/null 2>&1 || die "mm-labsvc did not come back up. Check: journalctl -u mm-labsvc -n 50"
+
+log "done. Fire an alert with: fire-alert.sh --severity CRITICAL"

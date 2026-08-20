@@ -23,7 +23,7 @@ export const config = {
     mattermostUrl: env('MM_URL', 'http://workbench:4000/mm'),
 
     /** Site URL, used to build permalinks. Not an API base. */
-    siteUrl: env('MM_SITE_URL', 'http://workbench:8065'),
+    siteUrl: env('MM_SITE_URL', 'http://mattermost:8065'),
 
     /** Bot token. Send it as `Authorization: Bearer <token>`. */
     botToken: env('MM_BOT_TOKEN'),

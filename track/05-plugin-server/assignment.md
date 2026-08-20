@@ -20,7 +20,7 @@ tabs:
 - id: rnucjsxyrrvq
   title: Mattermost
   type: service
-  hostname: workbench
+  hostname: mattermost
   port: 8065
 - id: ymc6wtx80ayy
   title: Editor
