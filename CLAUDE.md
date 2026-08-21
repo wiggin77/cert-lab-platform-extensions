@@ -110,6 +110,14 @@ describes), the reference builder from Module 3 on (so a later lab is never bloc
 earlier work). Module 5 depends on this, since the Escalate button lives in the attachment
 the learner builds.
 
+A REST posted alert **must lead its message text with the severity**, which is what
+`triggerableMessage()` in `mocks/feed.ts` guarantees. Trigger words are matched against
+`strings.Fields(post.Message)[0]` and `TriggerWordExactMatch` rejects an empty word
+(`channels/app/webhook.go:57`), so attachment content is invisible to the matcher. Alert
+payloads put everything in an attachment and leave `text` empty, so without this the post
+message is blank, no trigger can fire, and Module 3 is unsatisfiable however the learner
+configures the webhook. Do not "simplify" that function away.
+
 ## Things that will bite you
 
 **`removeAllContentTypeParsers()` in `labsvc/src/server.ts` is load bearing.** Fastify's

@@ -126,6 +126,31 @@ function plainTextFallback(alert: Alert): IncomingWebhookRequest {
     return {text: `[${alert.severity}] ${alert.title} ${alert.indicator} from ${alert.source}`}
 }
 
+/**
+ * Message text for a REST posted alert.
+ *
+ * Outgoing webhook trigger words are matched against the FIRST WORD of the post's message
+ * text, never against attachment content:
+ *
+ *   splitWords := strings.Fields(post.Message)   channels/app/webhook.go:57
+ *   firstWord = splitWords[0]
+ *
+ * and TriggerWordExactMatch returns false for an empty word. Alert payloads put everything
+ * in an attachment and leave text empty, so without this the message would be blank, no
+ * trigger could ever fire, and Module 3 would be unsatisfiable no matter what the learner
+ * configured.
+ *
+ * Leading with the severity is also what a real alert feed would do, and it makes the
+ * lesson visible: the learner can see the word their trigger has to match.
+ */
+function triggerableMessage(alert: Alert, payload: IncomingWebhookRequest): string {
+    const text = (payload.text ?? '').trim()
+    if (text.toUpperCase().startsWith(alert.severity)) {
+        return text
+    }
+    return text ? `${alert.severity} ${text}` : `${alert.severity} ${alert.title}`
+}
+
 export class MockFeed {
     #rand = mulberry32(config.feed.seed)
     #timer: NodeJS.Timeout | null = null
@@ -252,7 +277,7 @@ export class MockFeed {
             } else {
                 const post = await this.#bot.createPost({
                     channel_id: config.channels.alerts,
-                    message: payload.text || '',
+                    message: triggerableMessage(alert, payload),
                     props: {
                         ...(payload.props ?? {}),
                         ...labProps,
