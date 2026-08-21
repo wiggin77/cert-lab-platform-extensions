@@ -16,9 +16,8 @@ import type {FastifyInstance, FastifyReply, FastifyRequest} from 'fastify'
 import {config} from '../config.js'
 import type {CapturedMessage} from '../types.js'
 import {rawBody} from '../util/body.js'
+import {flattenHeaders, forwardableHeaders, relayableHeaders} from './headers.js'
 import type {Journal} from './journal.js'
-
-const HOP_BY_HOP = new Set(['host', 'content-length', 'connection', 'keep-alive', 'transfer-encoding', 'upgrade'])
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
 
@@ -29,25 +28,6 @@ const NOTABLE: Array<{test: RegExp; note: string; module: number}> = [
     {test: /^\/api\/v4\/posts\/[a-z0-9]+$/, note: 'Reading or updating a post', module: 3},
     {test: /^\/api\/v4\/channels\/[a-z0-9]+\/posts$/, note: 'Reading channel posts', module: 3},
 ]
-
-function flattenHeaders(headers: Record<string, unknown>): Record<string, string> {
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(headers)) {
-        out[k] = Array.isArray(v) ? v.join(', ') : String(v ?? '')
-    }
-    return out
-}
-
-function forwardableHeaders(headers: Record<string, unknown>): Record<string, string> {
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(headers)) {
-        if (HOP_BY_HOP.has(k.toLowerCase())) {
-            continue
-        }
-        out[k] = Array.isArray(v) ? v.join(', ') : String(v ?? '')
-    }
-    return out
-}
 
 function capture(headers: Record<string, unknown>, body: unknown, extra: Partial<CapturedMessage> = {}): CapturedMessage {
     let value = body
@@ -146,10 +126,8 @@ async function proxyToMattermost(req: FastifyRequest, reply: FastifyReply, deps:
         notes: notes.length ? notes : undefined,
     })
 
-    for (const [k, v] of Object.entries(responseHeaders)) {
-        if (!HOP_BY_HOP.has(k.toLowerCase())) {
-            reply.header(k, v)
-        }
+    for (const [k, v] of Object.entries(relayableHeaders(responseHeaders))) {
+        reply.header(k, v)
     }
     return reply.code(status).send(responseBody)
 }

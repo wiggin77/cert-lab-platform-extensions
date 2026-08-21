@@ -23,6 +23,7 @@ import {config} from '../config.js'
 import type {CapturedMessage} from '../types.js'
 import {rawBody} from '../util/body.js'
 import {describeError, errorName} from '../util/errors.js'
+import {forwardableHeaders, relayableHeaders} from './headers.js'
 import type {Journal} from './journal.js'
 
 export type InboundKind = 'outgoing_webhook' | 'slash_command' | 'post_action' | 'dialog_submit'
@@ -155,20 +156,6 @@ function capture(headers: Record<string, unknown>, body: unknown, extra: Partial
     }
 
     return {headers: flat, body: value, truncated: truncated || undefined, ...extra}
-}
-
-/** Headers that must not be relayed verbatim to the next hop. */
-const HOP_BY_HOP = new Set(['host', 'content-length', 'connection', 'keep-alive', 'transfer-encoding', 'upgrade'])
-
-function forwardableHeaders(headers: Record<string, unknown>): Record<string, string> {
-    const out: Record<string, string> = {}
-    for (const [k, v] of Object.entries(headers)) {
-        if (HOP_BY_HOP.has(k.toLowerCase())) {
-            continue
-        }
-        out[k] = Array.isArray(v) ? v.join(', ') : String(v ?? '')
-    }
-    return out
 }
 
 // ---------------------------------------------------------------------------
@@ -353,10 +340,8 @@ async function proxyToHandler(
     })
 
     reply.header('x-lab-correlation-id', correlationId)
-    for (const [k, v] of Object.entries(responseHeaders)) {
-        if (!HOP_BY_HOP.has(k.toLowerCase()) && k.toLowerCase() !== 'content-length') {
-            reply.header(k, v)
-        }
+    for (const [k, v] of Object.entries(relayableHeaders(responseHeaders))) {
+        reply.header(k, v)
     }
     return reply.code(status).send(responseBody)
 }
