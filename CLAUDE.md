@@ -153,6 +153,19 @@ Found by testing, none of it documented, each silent when violated. `track/confi
   host. A failure with no printed reason costs a full run to diagnose, so scripts print
   their own diagnostics (`wait_for` dumps `journalctl`; each container has a setup script).
 
+## systemd: EnvironmentFile beats Environment
+
+`mm-labsvc` and `mm-handler` share `/etc/lab.env`, but `MM_URL` means different things to
+them: labsvc addresses Mattermost directly because it **is** the proxy, while the handler
+goes **through** the proxy so its REST calls are recorded for the Lab Inspector.
+
+`MM_URL` is therefore absent from `lab.env` and set per unit with `Environment=`. Putting
+it back in the shared file silently breaks the handler: systemd documents that settings
+from `EnvironmentFile=` "override settings made with `Environment=`", and that precedence
+is **unconditional**, not decided by the order the lines appear in the unit. The only
+visible symptom is the Module 5 dialog check failing while everything else passes, because
+the outbound proxy records nothing.
+
 ## Two-step deploy
 
 Code and track config ship separately, and this is easy to trip over: you can push a track
