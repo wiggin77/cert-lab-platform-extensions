@@ -34,18 +34,27 @@ Each of `labsvc/`, `handler/`, and `track/` has its own README covering local us
 
 ## How it fits together
 
-```
-                  +---------------- labsvc :4000 ----------------+
-Mattermost  ------>  inbound proxy  ----------------------------->  handler :3000
-  :8065     <------  records both directions, rewrites            <--
-                  |  response_url, synthesises failures            |
-                  |                                               |
-            <------  outbound proxy  /mm/api/v4/*  ---------------- handler
-                  |                                               |
-                  |  mocks:    threat feed, threat intel, LLM      |
-                  |  grader:   stimulus + assertions per challenge |
-                  |  journal:  hash chained, streamed to the UI    |
-                  +-----------------------------------------------+
+Every request in both directions passes through `labsvc`.
+
+```mermaid
+flowchart LR
+    MM["Mattermost<br/>:8065"]
+    H["handler :3000<br/>the learner's code"]
+
+    subgraph svc["labsvc :4000"]
+        direction TB
+        IN["inbound<br/>proxy"]
+        OUT["outbound<br/>proxy"]
+        JRN[("journal")]
+    end
+
+    MM -->|"webhook, command, action"| IN
+    IN --> H
+    H -->|"REST API call"| OUT
+    OUT --> MM
+
+    IN -.-> JRN
+    OUT -.-> JRN
 ```
 
 Two properties do most of the work.

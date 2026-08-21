@@ -58,19 +58,20 @@ instead of two.
 Three Instruqt hosts. Mattermost and Postgres are containers, and the learner's mutable
 code lives on a VM.
 
-```
-container: postgres   :5432
-container: mattermost :8065      <- Instruqt tab "Mattermost"
-|
-VM: workbench
-|
-+-- systemd: mm-labsvc           (user: labsvc, /opt/lab/labsvc)
-|   +-- :4000                    <- Instruqt tab "Lab Inspector"
-|
-+-- systemd: mm-handler          (user: learner, /home/learner/handler)
-|   +-- :3000                    tsx watch, reloads on save
-|
-+-- code-server      :8080       <- Instruqt tab "Editor"
+```mermaid
+flowchart TB
+    subgraph containers["Container hosts"]
+        MM["mattermost :8065<br/><i>tab: Mattermost</i>"]
+        PG[("postgres :5432")]
+    end
+
+    subgraph vm["workbench (VM)"]
+        LS["mm-labsvc :4000<br/>user labsvc, /opt/lab/labsvc<br/><i>tab: Lab Inspector</i>"]
+        HD["mm-handler :3000<br/>user learner, /home/learner/handler<br/>tsx watch, reloads on save"]
+        CS["code-server :8080<br/><i>tab: Editor</i>"]
+    end
+
+    MM --- PG
 ```
 
 Mattermost and Postgres are containers because the official images run unmodified, need no
@@ -121,20 +122,33 @@ public URL variant and emit a targeted hint for it.
 
 Every byte between Mattermost and the learner's handler passes through labsvc.
 
+```mermaid
+flowchart TB
+    MM["Mattermost :8065"]
+    HD["handler :3000"]
+
+    subgraph svc["labsvc :4000"]
+        IN["inbound proxy<br/>records request, response,<br/>timing, status"]
+        OUT["outbound proxy<br/>/mm/api/v4/* to<br/>mattermost:8065/api/v4/*"]
+        JRN[("journal<br/>append only JSONL<br/>+ SSE stream")]
+    end
+
+    MM -->|"webhook, command, action"| IN
+    IN --> HD
+    HD --> OUT
+    OUT --> MM
+
+    IN -.->|"records"| JRN
+    OUT -.->|"records"| JRN
 ```
-                 +---------------- labsvc :4000 -----------------+
-Mattermost  ----->  inbound proxy  ------------------------------->  handler :3000
-  :8065     <-----  (records req + res, timing, status)          <--
-                 |                                               |
-           <-----  outbound proxy  <-------------------------------  handler
-                 |  /mm/api/v4/*  ->  mattermost:8065/api/v4/*    |
-                 |                                               |
-                 |  journal (append only JSONL + SSE stream)      |
-                 |  mocks: feed, intel, llm                       |
-                 |  grader: stimulus + assertions                 |
-                 |  inspector UI                                  |
-                 +-----------------------------------------------+
-```
+
+labsvc also hosts, on the same port:
+
+| Component | Purpose |
+| --- | --- |
+| mocks | threat feed, threat intel API, OpenAI compatible LLM |
+| grader | supplies its own stimulus, then asserts on Mattermost state |
+| inspector UI | reads the journal live over SSE |
 
 Why this earns its keep:
 
