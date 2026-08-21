@@ -40,15 +40,30 @@ app.post('/dialogs/escalate/submit', handleDialogSubmit)
  * An uncaught error in your code lands here.
  *
  * Mattermost shows a generic failure for a 500, which tells you nothing, so the real
- * message is logged and echoed back where the calling surface can display it.
+ * message is logged and echoed back where the calling surface can display it. Every
+ * surface reads a different field, so all of them are set:
+ *
+ *   text            slash commands and outgoing webhooks
+ *   ephemeral_text  post actions
+ *   error           dialog submissions
+ *
+ * `error` matters more than it looks. Without it a dialog whose handler threw just closes,
+ * exactly as though it had succeeded, and nothing is posted.
  */
 app.setErrorHandler((err: unknown, req, reply) => {
-    const message = err instanceof Error ? err.message : String(err)
+    // Node reports most network failures as the bare string "fetch failed" and hides the
+    // real reason on err.cause, which is useless on its own.
+    const cause = (err as {cause?: {code?: string}})?.cause?.code
+    const base = err instanceof Error ? err.message : String(err)
+    const message = `Handler error in ${req.url}: ${base}${cause ? ` (${cause})` : ''}`
+
     req.log.error({err}, `unhandled error in ${req.url}`)
+
     return reply.code(200).send({
         response_type: 'ephemeral',
-        ephemeral_text: `Handler error in ${req.url}: ${message}`,
-        text: `Handler error in ${req.url}: ${message}`,
+        text: message,
+        ephemeral_text: message,
+        error: message,
     })
 })
 
