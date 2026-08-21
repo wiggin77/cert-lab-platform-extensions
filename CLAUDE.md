@@ -130,6 +130,43 @@ Mattermost *server* process. `LABSVC_PUBLIC_BASE_URL` must be the internal addre
 The track setup script must set a dummy non-empty value when pointing it at
 `/mock/llm/v1`.
 
+## Instruqt platform behaviour
+
+Found by testing, none of it documented, each silent when violated. `track/config.yml` and
+`DESIGN.md` section 3.0 carry the detail.
+
+- Container hosts have **no persistent storage**. `volumes:` validates and is ignored.
+- Base images must be **Debian-family**. Alpine/musl fails to provision with an SSH
+  handshake error, because Instruqt injects its own `sandbox-agent` as PID 1.
+- Instruqt **ignores the image's `WORKDIR`** and runs from `/`.
+- **A container process that exits is not restarted.** Mattermost loses a startup race
+  against sandbox DNS, exits fatally, and stays down. `setup-mattermost` relaunches it.
+- Lifecycle script stdout is the **only** log Instruqt surfaces, and each script sees one
+  host. A failure with no printed reason costs a full run to diagnose, so scripts print
+  their own diagnostics (`wait_for` dumps `journalctl`; each container has a setup script).
+
+## Two-step deploy
+
+Code and track config ship separately, and this is easy to trip over: you can push a track
+and see none of your code changes.
+
+```bash
+git push                          # labsvc, handler, bin, variants  (cloned at setup)
+cd track && instruqt track push   # config, assignments, lifecycle scripts
+```
+
+Lifecycle scripts under `track/` deploy with the track, so they are testable without a git
+push. Everything the sandbox clones needs GitHub first. Use `LAB_REPO_REF` to point a run
+at a branch.
+
+## Solve scripts must do both halves
+
+A `solve-workbench` script has to reproduce the Mattermost-side configuration as well as
+the code, because the first check of most challenges asks whether an integration exists.
+`bin/lab-create-integration` does the API side. A solve script that only copies code leaves
+its challenge unsolvable, which also means CI can never verify a solution against its own
+checks.
+
 **Threads cannot span channels.** Cross-channel escalations use a permalink, never a
 `root_id`. This contradicts the curriculum copy in Modules 3 and 5, which needs a rewrite.
 

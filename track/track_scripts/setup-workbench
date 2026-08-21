@@ -130,7 +130,12 @@ done
 # ---------------------------------------------------------------------------
 # 3. Wait for Mattermost, which is provisioning in parallel as its own host
 # ---------------------------------------------------------------------------
-wait_for http://mattermost:8065/api/v4/system/ping "Mattermost" 150
+if ! wait_for http://mattermost:8065/api/v4/system/ping "Mattermost" 150; then
+    echo "[setup] Mattermost runs on its own host, so its logs are not here." >&2
+    echo "[setup] Look for the setup-mattermost output in this track log: it reports" >&2
+    echo "[setup] whether Postgres was reachable and whether a relaunch was attempted." >&2
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Seed, and write the environment both services read
@@ -150,6 +155,10 @@ JOURNAL_PATH=/var/lib/labsvc/journal.jsonl
 INTEL_API_URL=http://workbench:4000/mock/intel/v1
 FEED_INTERVAL_MS=60000
 FEED_AUTOSTART=false
+# The learner's own payload builder. Without this the feed falls back to plain text and
+# every Module 2 formatting check fails no matter what the learner writes, because their
+# code is never loaded.
+FEED_PAYLOAD_MODULE=${LEARNER_HOME}/handler/src/payloads/alert-payload.ts
 SLASH_ACK_BUDGET_MS=3000
 LAB_MODULE=2
 LOG_LEVEL=info
@@ -160,6 +169,12 @@ EOF
 
 mkdir -p /var/lib/labsvc
 chown -R "${LEARNER}:${LEARNER}" "$LEARNER_HOME"
+
+# labsvc runs as its own user and imports the learner's payload builder from their home
+# directory, so that path has to be readable by another account. useradd -m can produce a
+# 750 home depending on the image's login.defs, which would make the import fail with a
+# permission error that looks like the learner's code being broken.
+chmod 755 "$LEARNER_HOME"
 
 # ---------------------------------------------------------------------------
 # 5. Services

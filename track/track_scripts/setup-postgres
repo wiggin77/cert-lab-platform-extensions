@@ -24,6 +24,5 @@ done
 say "pg_isready after 90s: ${ready}"
 
 say "port 5432 listening: $(timeout 3 bash -c 'echo > /dev/tcp/localhost/5432' 2>/dev/null && echo yes || echo NO)"
-say "databases: $(psql -h localhost -U "${POSTGRES_USER:-postgres}" -tAc "SELECT string_agg(datname, ',') FROM pg_database" 2>/dev/null || echo '(query failed)')"
 
 exit 0

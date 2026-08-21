@@ -187,7 +187,7 @@ export async function runChallenge(module: number, challenge: number, deps: Grad
                         check.title,
                         `The check could not run: ${describeError(err, `Mattermost (${config.mattermostUrl})`)}`,
                         'This is an environment fault rather than something wrong with your work. ' +
-                            'Confirm Mattermost is up with: docker compose ps',
+                            'Check the lab service with: sudo systemctl status mm-labsvc',
                     ),
                 )
             }

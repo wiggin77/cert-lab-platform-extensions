@@ -49,5 +49,5 @@ if [ "$(jq -r '.pass' <<<"$report")" = "true" ]; then
 fi
 
 echo
-echo "Inspect the traffic at \${LABSVC_PUBLIC_BASE_URL}/inspector"
+echo "Inspect the traffic at the Lab Inspector tab, or ${LABSVC}/inspector"
 exit 1

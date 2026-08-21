@@ -55,25 +55,51 @@ instead of two.
 
 ## 3. Topology
 
-One Instruqt VM host, `workbench`. Not a container host: Module 6 needs the Go toolchain,
-Node, webpack, and Docker together, and a VM plus a hot start snapshot boots faster than
-building that image at track start.
+Three Instruqt hosts. Mattermost and Postgres are containers, and the learner's mutable
+code lives on a VM.
 
 ```
-Instruqt host: workbench (VM, hot start snapshot)
+container: postgres   :5432
+container: mattermost :8065      <- Instruqt tab "Mattermost"
 |
-+-- docker compose
-|   +-- postgres      :5432
-|   +-- mattermost    :8065      <- Instruqt tab "Mattermost"
+VM: workbench
 |
-+-- systemd: mm-labsvc           (user: labsvc, /opt/lab)
++-- systemd: mm-labsvc           (user: labsvc, /opt/lab/labsvc)
 |   +-- :4000                    <- Instruqt tab "Lab Inspector"
 |
 +-- systemd: mm-handler          (user: learner, /home/learner/handler)
-|   +-- :3000                    tsx watch, restarts on crash
+|   +-- :3000                    tsx watch, reloads on save
 |
 +-- code-server      :8080       <- Instruqt tab "Editor"
 ```
+
+Mattermost and Postgres are containers because the official images run unmodified, need no
+build, and the platform keeps them away from anything the learner breaks.
+
+The learner's code is on a VM for one decisive reason: **container hosts have no persistent
+storage.** A `volumes:` entry passes schema validation and is then silently ignored, so
+learner-authored code in a container would sit on an overlay filesystem and be lost if the
+pod restarted. The VM also carries the Go and Node toolchains Module 6 needs.
+
+Code reaches the VM by `git clone` at track setup. Instruqt has no mechanism for uploading
+a tree: assets become HTTPS URLs for assignment markdown, not host files. The alternative
+is baking a custom VM image, which needs a GCP project and Packer, and is worth doing later
+purely for startup time.
+
+### 3.0 Platform behaviour worth knowing before changing this
+
+All three were found by testing, none are documented, and each is silent when violated.
+
+- **Base images must be Debian-family.** Instruqt injects its own `sandbox-agent` as PID 1,
+  and an Alpine/musl image fails to provision with an SSH handshake error. This is why
+  Postgres is not the `-alpine` tag.
+- **Instruqt ignores the image's `WORKDIR`** and runs from `/`. Mattermost's plugin paths
+  are relative, so plugin startup fails with `mkdir ./client/plugins`. That breaks all of
+  Module 6, as a log warning rather than a crash. `config.yml` pins them absolutely.
+- **A container process that exits is not restarted.** Mattermost can start before sandbox
+  DNS resolves sibling hostnames, retries Postgres for about ten seconds, then exits
+  fatally, and stays down for the life of the sandbox. `track_scripts/setup-mattermost`
+  detects this and relaunches, which is why that script does more than diagnose.
 
 ### 3.1 Internal versus public URLs
 
