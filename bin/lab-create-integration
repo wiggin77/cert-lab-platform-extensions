@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+#
+# Creates a Mattermost integration through the API and registers its credential with the
+# lab, doing by script exactly what the learner does by hand in the UI.
+#
+#   lab-create-integration incoming-webhook    Module 2
+#   lab-create-integration outgoing-webhook    Module 3
+#   lab-create-integration slash-command       Module 4
+#
+# This exists for the solve- scripts and for CI. A solve script that only applies code
+# cannot satisfy a challenge whose first check is "an incoming webhook is configured",
+# because that half of the work happens in Mattermost rather than in the repo. Without
+# this, `instruqt track test` can never pass and CI can never verify a solution against
+# its own checks.
+#
+# Idempotent: an existing integration of the same kind is reused, so a solve script can
+# run twice without creating duplicates that confuse the graders.
+#
+set -euo pipefail
+SCRIPT_NAME=lab-create-integration
+# shellcheck source=lab-common.sh
+source "$(dirname "$(readlink -f "$0")")/lab-common.sh"
+
+require_root "$@"
+
+KIND="${1:-}"
+BIN_DIR="$(dirname "$(readlink -f "$0")")"
+
+MM_ADMIN_TOKEN="${MM_ADMIN_TOKEN:-$(lab_env_get MM_ADMIN_TOKEN || true)}"
+[ -n "$MM_ADMIN_TOKEN" ] || die "MM_ADMIN_TOKEN not available. Run lab-seed first."
+export MM_ADMIN_TOKEN
+
+TEAM_ID=$(lab_env_get MM_TEAM_ID || true)
+ALERTS_ID=$(lab_env_get MM_ALERTS_CHANNEL_ID || true)
+[ -n "$TEAM_ID" ] && [ -n "$ALERTS_ID" ] || die "team or channel ids missing from ${LAB_ENV}. Run lab-seed first."
+
+CALLBACK_BASE="${LABSVC_PUBLIC_BASE_URL:-http://workbench:4000}"
+
+json_field() { python3 -c "import json,sys; print(json.load(sys.stdin).get('$1',''))" 2>/dev/null; }
+
+# Picks the first existing integration matching a jq-less filter, or an empty string.
+find_existing() {
+    local path="$1" filter="$2"
+    mm GET "$path" 2>/dev/null | python3 -c "
+import json, sys
+try:
+    items = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+if not isinstance(items, list):
+    sys.exit(0)
+for it in items:
+    if ${filter}:
+        print(json.dumps(it))
+        break
+" 2>/dev/null
+}
+
+case "$KIND" in
+
+incoming-webhook)
+    existing=$(find_existing "/hooks/incoming?per_page=200" "it.get('channel_id') == '${ALERTS_ID}'")
+    if [ -n "$existing" ]; then
+        HOOK_ID=$(printf '%s' "$existing" | json_field id)
+        log "reusing incoming webhook ${HOOK_ID}"
+    else
+        log "creating an incoming webhook on #alerts"
+        HOOK_ID=$(mm POST /hooks/incoming \
+            "{\"channel_id\":\"${ALERTS_ID}\",\"display_name\":\"Threat Feed\",\"description\":\"Simulated threat intelligence feed\"}" \
+            | json_field id)
+    fi
+    [ -n "$HOOK_ID" ] || die "could not create an incoming webhook"
+
+    # The feed calls this from the workbench VM, so it needs the internal address.
+    "${BIN_DIR}/lab-set-webhook" "${MM}/hooks/${HOOK_ID}"
+    ;;
+
+outgoing-webhook)
+    existing=$(find_existing "/hooks/outgoing?per_page=200" \
+        "it.get('channel_id') == '${ALERTS_ID}' and 'CRITICAL' in [w.upper() for w in (it.get('trigger_words') or [])]")
+    if [ -n "$existing" ]; then
+        TOKEN=$(printf '%s' "$existing" | json_field token)
+        log "reusing outgoing webhook $(printf '%s' "$existing" | json_field id)"
+    else
+        log "creating an outgoing webhook on #alerts triggering on CRITICAL"
+        # trigger_when 0 means the trigger word must be the first word of the message,
+        # which is how Mattermost actually behaves. content_type form-encoded matches what
+        # the handler parses and what the assignment tells the learner to choose.
+        TOKEN=$(mm POST /hooks/outgoing "$(cat <<JSON
+{
+  "team_id": "${TEAM_ID}",
+  "channel_id": "${ALERTS_ID}",
+  "display_name": "Critical Escalation",
+  "description": "Escalates CRITICAL alerts to #incidents",
+  "trigger_words": ["CRITICAL"],
+  "trigger_when": 0,
+  "callback_urls": ["${CALLBACK_BASE}/hooks/outgoing"],
+  "content_type": "application/x-www-form-urlencoded"
+}
+JSON
+)" | json_field token)
+    fi
+    [ -n "$TOKEN" ] || die "could not create an outgoing webhook"
+
+    "${BIN_DIR}/lab-set-token" outgoing "$TOKEN"
+    ;;
+
+slash-command)
+    existing=$(find_existing "/commands?team_id=${TEAM_ID}&custom_only=true" \
+        "str(it.get('trigger','')).lower() == 'threat'")
+    if [ -n "$existing" ]; then
+        TOKEN=$(printf '%s' "$existing" | json_field token)
+        log "reusing the /threat command"
+    else
+        log "creating the /threat slash command"
+        # method "P" is POST. A GET sends the payload as query parameters, which the
+        # handler does not read.
+        TOKEN=$(mm POST /commands "$(cat <<JSON
+{
+  "team_id": "${TEAM_ID}",
+  "trigger": "threat",
+  "method": "P",
+  "url": "${CALLBACK_BASE}/commands/threat",
+  "display_name": "Threat Intel Lookup",
+  "description": "Look up an indicator against threat intelligence",
+  "auto_complete": true,
+  "auto_complete_desc": "Look up an IP, domain, or file hash",
+  "auto_complete_hint": "<indicator>"
+}
+JSON
+)" | json_field token)
+    fi
+    [ -n "$TOKEN" ] || die "could not create the /threat command"
+
+    "${BIN_DIR}/lab-set-token" command "$TOKEN"
+    ;;
+
+*)
+    die "usage: lab-create-integration <incoming-webhook|outgoing-webhook|slash-command>"
+    ;;
+esac
+
+log "done"

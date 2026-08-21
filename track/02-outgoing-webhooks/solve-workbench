@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
 #
-# Applies the worked solution for module 3.
+# Applies the worked solution for this challenge.
+#
+# Two halves, and both are needed. The learner configures an integration in the Mattermost
+# UI and writes handler code, so a solve script that only copies code leaves the challenge
+# unsolvable: its first check asks whether the integration exists.
 #
 set -euo pipefail
+
+# 1. The Mattermost side, which the learner would do by hand.
+/opt/lab/bin/lab-create-integration outgoing-webhook
+
+# 2. The code side.
 HANDLER_DIR=/home/learner/handler /opt/lab/variants/apply-variant.sh mod3 solution
 chown -R learner:learner /home/learner/handler
+
+# tsx watch reloads on save, but give it a moment to pick the change up before the
+# platform runs the check.
+sleep 3
 exit 0

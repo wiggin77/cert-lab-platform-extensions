@@ -26,13 +26,23 @@ GO_VERSION=1.23.12
 log() { echo "[setup] $*"; }
 
 wait_for() {
-    local url="$1" name="$2" tries="${3:-90}"
+    local url="$1" name="$2" tries="${3:-90}" unit="${4:-}"
     log "waiting for ${name}"
     for _ in $(seq 1 "$tries"); do
         curl -sf -m 3 "$url" >/dev/null 2>&1 && { log "${name} is up"; return 0; }
         sleep 2
     done
+
     echo "[setup] FAILED: ${name} never came up at ${url}" >&2
+
+    # A service that does not answer has almost always died with a reason in its journal.
+    # Instruqt surfaces nothing but this script's own output, so print the reason here
+    # rather than making the next run the diagnostic.
+    if [ -n "$unit" ]; then
+        echo "[setup] --- systemctl is-active ${unit}: $(systemctl is-active "$unit" 2>&1)" >&2
+        echo "[setup] --- last 40 journal lines for ${unit}:" >&2
+        journalctl -u "$unit" -n 40 --no-pager 2>&1 | sed 's/^/[setup]   /' >&2
+    fi
     return 1
 }
 
@@ -97,7 +107,11 @@ rm -rf "$LAB_ROOT"
 git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$LAB_ROOT" 2>&1 | sed 's/^/[setup]   /'
 
 log "installing labsvc dependencies"
-npm --prefix "${LAB_ROOT}/labsvc" ci --omit=dev --no-audit --no-fund >/dev/null
+# Not --omit=dev. Both services run their TypeScript directly under tsx with no build
+# step, so tsx is a runtime dependency even though package.json lists it under
+# devDependencies. Omitting dev deps here left tsx missing, npx then tried to fetch it
+# from the network as a nologin user with no HOME, and the service never started.
+npm --prefix "${LAB_ROOT}/labsvc" ci --no-audit --no-fund >/dev/null
 
 # The learner gets their own copy. /opt/lab stays pristine so a reset can restore from it,
 # and so grading code is not sitting in a directory the learner can edit.
@@ -171,7 +185,11 @@ Type=simple
 User=labsvc
 WorkingDirectory=${LAB_ROOT}/labsvc
 EnvironmentFile=${LAB_ENV}
-ExecStart=/usr/bin/npx tsx src/server.ts
+# The local binary, not npx. npx falls back to a network fetch when the package is
+# missing, which turns a dependency problem into a hang, and it wants a writable cache
+# directory that a nologin service user does not have.
+Environment=HOME=/tmp
+ExecStart=${LAB_ROOT}/labsvc/node_modules/.bin/tsx src/server.ts
 Restart=always
 RestartSec=2
 
@@ -189,8 +207,9 @@ Type=simple
 User=${LEARNER}
 WorkingDirectory=${LEARNER_HOME}/handler
 EnvironmentFile=${LAB_ENV}
+Environment=HOME=${LEARNER_HOME}
 # tsx watch, so a saved edit reloads without the learner restarting anything.
-ExecStart=/usr/bin/npx tsx watch src/index.ts
+ExecStart=${LEARNER_HOME}/handler/node_modules/.bin/tsx watch src/index.ts
 Restart=always
 RestartSec=2
 
@@ -210,10 +229,10 @@ chown -R "${LEARNER}:${LEARNER}" "${LEARNER_HOME}/.config"
 
 systemctl daemon-reload
 systemctl enable --now mm-labsvc
-wait_for http://localhost:4000/healthz "labsvc" 60
+wait_for http://localhost:4000/healthz "labsvc" 60 mm-labsvc
 
 systemctl enable --now mm-handler
-wait_for http://localhost:3000/healthz "handler" 60
+wait_for http://localhost:3000/healthz "handler" 60 mm-handler
 
 systemctl enable --now "code-server@${LEARNER}"
 

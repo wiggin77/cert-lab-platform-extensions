@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#
+# Runs inside the Mattermost container. Diagnostics only, never fails the track.
+#
+# Mattermost is configured entirely through MM_* environment variables in config.yml, and
+# a value it cannot parse makes it exit during startup. From the workbench VM that looks
+# only like "Mattermost never came up", because lifecycle script output is the only log
+# Instruqt surfaces and each script runs on exactly one host.
+#
+# Every fact below is emitted as a single line with command substitution, so an empty
+# result is still a line. A previous version piped blocks through sed and printed nothing
+# but headers, which left it ambiguous whether the checks found nothing or never ran.
+#
+set -uo pipefail
+
+LOG=/mattermost/logs/mattermost.log
+say() { echo "[mm] $*"; }
+
+say "script is running, uid=$(id -u 2>/dev/null || echo '?') pwd=$(pwd 2>/dev/null || echo '?')"
+say "MM_ env var count: $(env 2>/dev/null | grep -c '^MM_' || echo 0)"
+say "hostname: $(hostname 2>/dev/null || echo '?')"
+
+# Mattermost exits if it cannot reach the database, so check that before blaming config.
+say "postgres:5432 reachable: $(timeout 3 bash -c 'echo > /dev/tcp/postgres/5432' 2>/dev/null && echo yes || echo NO)"
+
+up=no
+for _ in $(seq 1 45); do
+    if curl -sf -m 3 http://localhost:8065/api/v4/system/ping >/dev/null 2>&1; then
+        up=yes
+        break
+    fi
+    sleep 2
+done
+say "ping after 90s: ${up}"
+
+if [ "$up" = yes ]; then
+    say "body: $(curl -s -m 5 http://localhost:8065/api/v4/system/ping 2>/dev/null)"
+    exit 0
+fi
+
+say "mattermost processes: $(pgrep -c -f '[m]attermost' 2>/dev/null || echo 0)"
+say "port 8065 listening: $(timeout 3 bash -c 'echo > /dev/tcp/localhost/8065' 2>/dev/null && echo yes || echo NO)"
+say "log file exists: $([ -f "$LOG" ] && echo yes || echo NO)"
+say "log size: $([ -f "$LOG" ] && wc -c < "$LOG" 2>/dev/null || echo 0)"
+
+# One line per variable, so a malformed value is visible rather than collapsed into a
+# block that may print as nothing.
+while IFS= read -r line; do
+    say "env ${line}"
+done < <(env 2>/dev/null | grep '^MM_' | sort)
+
+if [ -f "$LOG" ]; then
+    while IFS= read -r line; do
+        say "err ${line:0:400}"
+    done < <(grep -iE '"level":"(error|fatal|panic)"|invalid|unmarshal|failed to' "$LOG" 2>/dev/null | tail -12)
+
+    while IFS= read -r line; do
+        say "log ${line:0:400}"
+    done < <(tail -15 "$LOG" 2>/dev/null)
+fi
+
+exit 0
