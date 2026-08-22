@@ -109,10 +109,23 @@ JSON
 # Nest the plugin config under PluginSettings.Plugins.<id> and validate it as JSON on the
 # way through, so a typo in the heredoc fails here rather than silently half-configuring
 # the plugin.
+# Everything goes under a single "Config" key, and that nesting is the whole ballgame.
+#
+# The Agents plugin declares exactly one setting in its plugin.json settings_schema,
+# "Config", and loads it into a struct whose only field is `config.Config` carrying an
+# explicit `json:"config"` tag. An explicit tag on an embedded field makes it a NAMED
+# field rather than an inlined one, so the services and bots arrays have to sit inside a
+# "config" object. Written at the top level instead they are simply not seen.
+#
+# Nothing complains when this is wrong, which is what made it expensive: the settings are
+# stored verbatim, the plugin's one-shot config migration runs and reports success, and it
+# migrates an empty config. EnsureBots then has no bots to create, returns no error, and
+# the only symptom is the LLM Bridge answering "no bot found for service" two challenges
+# later.
 BODY=$(PLUGIN_CONFIG="$PLUGIN_CONFIG" python3 - "$PLUGIN_ID" <<'PY'
 import json, os, sys
 cfg = json.loads(os.environ["PLUGIN_CONFIG"])
-print(json.dumps({"PluginSettings": {"Plugins": {sys.argv[1]: cfg}}}))
+print(json.dumps({"PluginSettings": {"Plugins": {sys.argv[1]: {"Config": cfg}}}}))
 PY
 ) || die "the plugin configuration is not valid JSON"
 
@@ -215,8 +228,10 @@ else
     warn "bot ${BOT_NAME} was not created, so Agents rejected or ignored the bot config."
     warn "Module 6's AI skill will fail with 'no bot found for service: ${SERVICE_ID}'."
     warn "--- ${PLUGIN_ID} config as actually stored:"
+    # Note the .Config indirection. Reading the top level here would show nothing even
+    # when the settings are correct, which is exactly the confusion this whole path caused.
     mm GET /config 2>/dev/null |
-        jq -c --arg id "$PLUGIN_ID" '.PluginSettings.Plugins[$id]
+        jq -c --arg id "$PLUGIN_ID" '.PluginSettings.Plugins[$id].Config
             | {services: [.services[]? | {id, type, apiURL}],
                bots: [.bots[]? | {name, serviceID}],
                defaultBotName}' >&2 || warn "(could not read the stored config)"

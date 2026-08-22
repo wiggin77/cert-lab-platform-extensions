@@ -289,6 +289,20 @@ what breaks it. `UseResponsesAPI` is left unset, so the service registers `ChatO
 Bifrost downgrades any Responses-API request rather than calling `/v1/responses`, which the
 mock does not serve.
 
+**The Agents config goes under a single `Config` key, and nothing tells you when it does
+not.** Its `plugin.json` declares exactly one setting, `Config`, and it loads that into a
+struct whose only field is `config.Config` with an explicit `json:"config"` tag. An
+explicit tag on an embedded field makes it a *named* field rather than an inlined one, so
+`services` and `bots` must sit inside a `config` object:
+
+    {"PluginSettings": {"Plugins": {"mattermost-ai": {"Config": {"services": [...], "bots": [...]}}}}}
+
+Written at the top level instead, the settings store verbatim, the one-shot migration below
+runs and logs success, and it migrates an empty config. `EnsureBots` then has nothing to
+create and returns no error, so the only symptom is the bridge answering "no bot found for
+service" two challenges away. When debugging this, read `.PluginSettings.Plugins[id].Config`
+and not the level above it, or a correct config looks empty.
+
 **Agents 2.x reads `PluginSettings` exactly once, so `lab-configure-agents` writes the
 config BEFORE installing the plugin.** On first activation it checks
 `store.IsConfigMigrated()`, and if false loads `PluginSettings`, writes it to its own
