@@ -195,6 +195,61 @@ checks.
 slash commands carry a plaintext shared token in the request body. Any lesson about
 verifying a signature is teaching something that does not exist.
 
+## The Module 6 plugin
+
+`plugin/` is the scaffold copied to `/home/learner/plugin` at setup. The learner writes
+`server/hooks.go` and `server/api.go`; everything else is given.
+
+**`server/public` v0.1.22 calls the type `model.SlackAttachment`, not
+`model.MessageAttachment`.** Current Mattermost master uses the newer name, so reading
+attachment code out of the checkout and pasting it in does not compile. `post.Attachments()`
+returns `[]*model.SlackAttachment` at this version.
+
+**The Go toolchain on the VM must be at or above the `go` directive in `plugin/go.mod`.**
+`server/public` v0.1.22 requires 1.24.11, so `GO_VERSION` in `setup-workbench` is 1.25.5. An
+older toolchain does not print "upgrade Go": it tries to download a newer one, which hangs
+or fails for a user with no writable cache. Bumping `server/public` can silently raise this
+floor, so re-check `grep '^go ' plugin/go.mod` after any dependency change.
+
+**`make` is in the required apt package list, not `build-essential`.** `build-essential` is
+deliberately allowed to fail, and the plugin build is driven by a Makefile.
+
+**The plugin bundle tar must contain exactly one top level directory named for the plugin
+id**, with `plugin.json` at its root. A flat archive is rejected on upload with a message
+that does not say which rule was broken.
+
+**Deploy is an API upload, not a file copy.** Mattermost runs in its own container, so its
+plugin directory is not on the workbench. `make deploy` POSTs to `/api/v4/plugins` with
+`force=true`, then `/api/v4/plugins/{id}/enable`. Both return before the plugin process is
+actually up, so the solve script polls `/api/v4/plugins` for the id under `active`.
+
+**A phony Make target must not share a name with a real directory.** `make webapp` alongside
+`webapp/` works only while the `.PHONY` line survives, and then stops rebuilding with no
+error. The targets are `build-server` and `build-webapp`.
+
+### Tests are the inner loop
+
+`plugin/server/*_test.go` ships in the scaffold, so `make test` is a spec the learner can
+run without deploying: 14 tests in ~50ms against an in-memory KV Store, versus most of a
+minute for a deploy plus a stimulus. They fail on the untouched scaffold by design.
+
+The KV mock is backed by a real map, not per-call expectations, so a test can write and read
+back the way the plugin does at runtime. `AssertExpectations` is deliberately **not** used:
+it turns "not written yet" into pages of mock noise that buries the one assertion explaining
+what is missing. Mocks are `.Maybe()` for the same reason.
+
+Posts in tests are round-tripped through JSON on purpose. Real attachments arrive as `[]any`
+of `map[string]any`, so code that type asserts straight to the typed slice passes a
+naively-built test and finds nothing in production.
+
+### Variants target the handler or the plugin
+
+`apply-variant.sh` reads `variants/<module>/dest`, holding `handler` or `plugin`. Absent
+means handler, so modules 2 to 5 are unchanged. `mod6-server` and `mod6-webapp` say
+`plugin`. This is explicit rather than inferred from the module name because a variant
+copied into the wrong tree fails later, somewhere else, as a compile error in code nobody
+touched.
+
 ## Mattermost payload types
 
 `labsvc/src/types.ts` and `handler/src/lib/types.ts` are transcribed from
@@ -208,12 +263,19 @@ drift.
 
 Built: journal, both proxies, all three mocks (feed, threat intel, OpenAI compatible LLM),
 grader framework, checks for all six challenges, snapshot and reset, inspector UI, handler
-scaffold, solution variants for modules 2 and 3.
+scaffold, the Instruqt track configuration, the plugin scaffold with its test suite, and
+solution variants for modules 2 to 5 plus `mod6-server`.
 
-Not built: solution variants for modules 4 to 6, the Module 6 plugin scaffold, the Instruqt
-track configuration, and the CI loop described above.
+Challenges 1 to 4 pass end to end on Instruqt, 14 out of 14 checks.
 
-Module 6 challenge 1 checks a `GET /api/v1/alerts/count` endpoint that the curriculum does
-not currently mention. It closes a gap the doc review flagged (nothing described how the
-header widget's open alert count is stored or fetched) and needs a one-line addition to the
-lab copy.
+Not built: the `mod6-webapp` variant (post card, RHS pane, header widget), the plugin's
+`/api/v1/alert/{id}/analyze` endpoint and its Agents plugin bridge, the CI loop described
+above, and a baked VM image with the toolchains pre-installed.
+
+**The custom post card cannot render yet.** `registerPostTypeComponent` matches on
+`post.Type`, and the feed posts alerts with no custom type, so a correct card is never
+reached. The grader only inspects the bundle for the registration, and says so, but the
+learner would build something invisible. The fix is for the scaffold to stamp
+`post.Type = "custom_soc_alert"` in `MessageWillBePosted` (the *Will* hook, since
+`MessageHasBeenPosted` cannot change a saved post). Deliberately deferred to the webapp
+challenge so it can be verified in a browser alongside the component that consumes it.

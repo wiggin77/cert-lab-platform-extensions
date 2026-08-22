@@ -1,0 +1,5 @@
+# Build output. The bundle is 12 MB, mostly the static Go binary.
+dist/
+server/dist/
+webapp/dist/
+webapp/node_modules/

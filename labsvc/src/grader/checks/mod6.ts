@@ -284,22 +284,30 @@ async function bundleRegisters(ctx: CheckContext): Promise<CheckResult> {
         )
     }
 
-    if (bundle.text.length < 1000) {
-        return fail(
-            id,
-            title,
-            `The bundle at ${bundle.path} is only ${bundle.text.length} bytes.`,
-            'That is too small to contain a built webapp. The build probably failed part way through.',
-        )
-    }
-
+    // Symbols are tested before size on purpose. The starter bundle is under a kilobyte,
+    // so a size test first would tell a learner who has simply not written the
+    // registrations yet that their build is broken, which it is not.
+    //
+    // The symbols survive minification because they are property accesses, and terser
+    // does not mangle property names by default. Comments and TypeScript types naming
+    // them do NOT survive, so a bundle that mentions them only in a TODO does not pass.
     const missing = REGISTRATIONS.filter((r) => !bundle.text.includes(r.symbol))
     if (missing.length) {
         return fail(
             id,
             title,
-            `Bundle served (${Math.round(bundle.text.length / 1024)} KB) but ${missing.map((m) => m.symbol).join(', ')} not found in it.`,
-            `Register ${missing.map((m) => m.what).join(', ')} in your plugin's initialize(registry, store).`,
+            `Bundle served (${bundle.text.length} bytes) but ${missing.map((m) => m.symbol).join(', ')} not found in it.`,
+            `Register ${missing.map((m) => m.what).join(', ')} in your plugin's initialize(registry, store). ` +
+                'If you have written the calls already, rebuild with `make deploy`: the served bundle is the built one, not your source.',
+        )
+    }
+
+    if (bundle.text.length < 1000) {
+        return fail(
+            id,
+            title,
+            `All three registrations are present, but the bundle at ${bundle.path} is only ${bundle.text.length} bytes.`,
+            'That is too small to contain the components as well as the registry calls. The build probably failed part way through.',
         )
     }
 

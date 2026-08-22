@@ -1,0 +1,29 @@
+{
+    "id": "com.mattermost.cert-alerts",
+    "name": "SOC Alerts",
+    "description": "Captures threat feed alerts, stores them in the KV Store, and renders them in the webapp. Certification lab, Module 6.",
+    "homepage_url": "https://github.com/wiggin77/cert-lab-platform-extensions",
+    "support_url": "https://github.com/wiggin77/cert-lab-platform-extensions/issues",
+    "version": "0.1.0",
+    "min_server_version": "9.5.0",
+    "server": {
+        "executables": {
+            "linux-amd64": "server/dist/plugin-linux-amd64"
+        }
+    },
+    "webapp": {
+        "bundle_path": "webapp/dist/main.js"
+    },
+    "settings_schema": {
+        "header": "Stores alerts posted to the SOC alerts channel and exposes them over HTTP.",
+        "settings": [
+            {
+                "key": "AlertsChannelID",
+                "display_name": "Alerts channel ID",
+                "type": "text",
+                "help_text": "Only posts in this channel are captured. Track setup fills this in, so you should not need to touch it. Note this is the channel ID, not its name.",
+                "default": ""
+            }
+        ]
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "target": "es2019",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "lib": ["dom", "dom.iterable", "es2020"],
+        "jsx": "react-jsx",
+        "strict": true,
+        "noEmit": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "baseUrl": "src"
+    },
+    "include": ["src/**/*"]
+}

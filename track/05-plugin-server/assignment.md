@@ -74,12 +74,22 @@ records at status `open` rather than caching a value at activation, or it will d
 
 ## 3. Build and deploy
 
+There are tests for everything above, and they are the fast way to work. They run against
+an in-memory KV Store with no server involved, so they finish in under a second:
+
 ```bash
 cd /home/learner/plugin
+make test
+```
+
+They fail on the untouched scaffold, and each failure names the behaviour that is missing.
+Once they pass, deploy for real:
+
+```bash
 make deploy
 ```
 
-Then fire an alert and check your work:
+Then fire an alert and check your work end to end:
 
 ```bash
 fire-alert.sh --severity CRITICAL

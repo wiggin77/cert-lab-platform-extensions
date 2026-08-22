@@ -21,7 +21,12 @@ LEARNER_HOME=/home/learner
 LAB_ENV=/etc/lab.env
 
 NODE_MAJOR=22
-GO_VERSION=1.23.12
+
+# Must stay at or above the `go` directive in plugin/go.mod, which is set by
+# github.com/mattermost/mattermost/server/public and is currently 1.24.11. An older
+# toolchain does not fail with "upgrade your Go": it tries to download a newer one, and
+# that hangs or fails as a service user with no writable cache.
+GO_VERSION=1.25.5
 
 log() { echo "[setup] $*"; }
 
@@ -70,7 +75,9 @@ install_pkgs() {
     return 1
 }
 
-install_pkgs git curl jq ca-certificates || {
+# make is in this list, not in build-essential below, because Module 6's plugin build is
+# driven by a Makefile. build-essential is allowed to fail; make is not.
+install_pkgs git curl jq make ca-certificates || {
     echo "[setup] FAILED: could not install base packages" >&2
     exit 1
 }
@@ -119,6 +126,12 @@ log "installing the learner handler"
 rm -rf "${LEARNER_HOME}/handler"
 cp -r "${LAB_ROOT}/handler" "${LEARNER_HOME}/handler"
 npm --prefix "${LEARNER_HOME}/handler" ci --no-audit --no-fund >/dev/null
+
+# The Module 6 plugin scaffold. Same reasoning as the handler: the learner edits their own
+# copy and /opt/lab stays pristine.
+log "installing the plugin scaffold"
+rm -rf "${LEARNER_HOME}/plugin"
+cp -r "${LAB_ROOT}/plugin" "${LEARNER_HOME}/plugin"
 
 chmod +x "${LAB_ROOT}"/labsvc/scripts/*.sh "${LAB_ROOT}"/variants/*.sh "${LAB_ROOT}"/bin/*
 ln -sf "${LAB_ROOT}/labsvc/scripts/fire-alert.sh" /usr/local/bin/fire-alert.sh
@@ -177,6 +190,41 @@ chown -R "${LEARNER}:${LEARNER}" "$LEARNER_HOME"
 # 750 home depending on the image's login.defs, which would make the import fail with a
 # permission error that looks like the learner's code being broken.
 chmod 755 "$LEARNER_HOME"
+
+# ---------------------------------------------------------------------------
+# 4b. Warm the plugin build caches
+# ---------------------------------------------------------------------------
+# Module 6 opens with `make deploy`. Without this, that first build downloads the whole
+# Go module graph and the webpack toolchain while the learner watches a stalled terminal,
+# inside a 30 minute challenge timer.
+#
+# It runs as the learner, not root, and that matters: a module cache under /root is not
+# readable by them, so the download would silently happen again on first build. Same for
+# node_modules, which would additionally end up root owned and unwritable.
+#
+# Non-fatal. A network hiccup here costs the learner time, but the track still works.
+log "warming the plugin build caches"
+# `go test -run` with a pattern that matches nothing compiles the test binary without
+# running it. That is deliberate: it pulls the test-only dependencies into the cache as
+# well as the build ones, so `make test` is also instant. `go mod download` alone leaves
+# testify to be fetched on first use.
+if ! su -l "$LEARNER" -c "cd ~/plugin && go mod download && go test -run XXXNoSuchTest ./server/" \
+    >/tmp/plugin-warm-go.log 2>&1; then
+    log "WARNING: warming the Go cache failed, Module 6's first build will be slow:"
+    tail -5 /tmp/plugin-warm-go.log | sed 's/^/[setup]   /'
+fi
+
+if ! su -l "$LEARNER" -c "cd ~/plugin/webapp && npm install --no-audit --no-fund" >/tmp/plugin-warm-npm.log 2>&1; then
+    log "WARNING: npm install for the plugin webapp failed:"
+    tail -5 /tmp/plugin-warm-npm.log | sed 's/^/[setup]   /'
+fi
+
+# Build both halves once, so a broken scaffold surfaces here rather than as the learner's
+# first experience of Module 6.
+if ! su -l "$LEARNER" -c "cd ~/plugin && make bundle" >/tmp/plugin-warm-build.log 2>&1; then
+    log "WARNING: the plugin scaffold does not build:"
+    tail -20 /tmp/plugin-warm-build.log | sed 's/^/[setup]   /'
+fi
 
 # ---------------------------------------------------------------------------
 # 5. Services
