@@ -289,6 +289,22 @@ what breaks it. `UseResponsesAPI` is left unset, so the service registers `ChatO
 Bifrost downgrades any Responses-API request rather than calling `/v1/responses`, which the
 mock does not serve.
 
+**Agents 2.x reads `PluginSettings` exactly once, so `lab-configure-agents` writes the
+config BEFORE installing the plugin.** On first activation it checks
+`store.IsConfigMigrated()`, and if false loads `PluginSettings`, writes it to its own
+database table, and marks itself migrated (`server/main.go`). After that it reads only the
+database, and v2.2.0 has no `OnConfigurationChange`, so later writes to `PluginSettings`
+are never seen. Configuring after enabling looked like it worked and did nothing: the
+plugin had migrated the old bundled version's (empty) config, and ours went to a file it
+had stopped reading. Disabling and re-enabling does **not** help, because that is a second
+activation and migration has already run. Do not reorder those two sections.
+
+The visible symptom was a bridge 404 naming the service, two challenges away from the
+cause. Worth knowing why the message misleads: in `EnsureBots`, a `getLLM` error returns
+before `b.bots` is ever assigned (`bots/bots.go`), so one unusable service leaves
+`GetAllBots()` empty and *every* service reports "no bot found" regardless of its own
+config.
+
 **The service completion endpoint still needs a bot.** Despite the name, the bridge calls
 `getBotByService(service)` and 404s if no configured bot references that service id
 (`api/api_llm_bridge.go:971`). `lab-configure-agents` happens to define bot

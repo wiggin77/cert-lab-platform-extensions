@@ -43,8 +43,87 @@ export MM_ADMIN_TOKEN
 wait_for_mattermost 60
 
 # ---------------------------------------------------------------------------
-# 1. Install
+# 1. Configure, BEFORE installing. Do not reorder these two sections.
 # ---------------------------------------------------------------------------
+# Agents 2.x reads PluginSettings exactly once, ever.
+#
+# On its first activation it checks store.IsConfigMigrated(), and if false it loads
+# PluginSettings, writes the result to its own database table, and marks itself migrated
+# (server/main.go). From then on it reads only the database, and v2.2.0 has no
+# OnConfigurationChange hook, so nothing written to PluginSettings afterwards is ever seen
+# again.
+#
+# Configuring after enabling therefore looked like it worked and did nothing: the plugin
+# migrated whatever was there at activation (the old bundled version's config, i.e.
+# nothing), our services and bots were written to a file the plugin had stopped reading,
+# and the whole failure surfaced two challenges later as a bridge 404 naming the service.
+#
+# Writing the config first means it is already in place whenever the new version first
+# activates, so the migration picks it up. A bounce cannot substitute for this: a restart
+# is a SECOND activation, and by then migration has already happened.
+#
+# Known limit: if a sandbox somehow has 2.x already installed AND migrated, this script
+# cannot correct its stored config, because there is no API to re-run the migration. Track
+# runs start from a fresh sandbox with the older bundled build, so that case does not arise
+# here.
+#
+# apiKey must be non-empty. The Agents plugin rejects a blank key even for a local,
+# OpenAI compatible service, which fails every model fetch and inference call with a
+# "No valid keys" error. The value itself is never checked by the mock.
+log "pointing Agents at ${MOCK_LLM_URL}"
+
+read -r -d '' PLUGIN_CONFIG <<JSON || true
+{
+  "services": [
+    {
+      "id": "${SERVICE_ID}",
+      "name": "Lab Mock LLM",
+      "type": "openaicompatible",
+      "apiURL": "${MOCK_LLM_URL}",
+      "apiKey": "lab-dummy-key-must-not-be-blank",
+      "defaultModel": "lab-threat-analyst-v1",
+      "tokenLimit": 8192
+    }
+  ],
+  "bots": [
+    {
+      "id": "${BOT_NAME}",
+      "name": "${BOT_NAME}",
+      "displayName": "Threat Analyst",
+      "serviceID": "${SERVICE_ID}",
+      "customInstructions": "You are a security operations analyst assistant. Be concise and specific.",
+      "model": "lab-threat-analyst-v1",
+      "enableVision": false,
+      "disableTools": true,
+      "channelAccessLevel": 0,
+      "userAccessLevel": 0
+    }
+  ],
+  "defaultBotName": "${BOT_NAME}",
+  "allowedUpstreamHostnames": "workbench",
+  "enableCallSummary": false,
+  "enableTokenUsageLogging": false
+}
+JSON
+
+# Nest the plugin config under PluginSettings.Plugins.<id> and validate it as JSON on the
+# way through, so a typo in the heredoc fails here rather than silently half-configuring
+# the plugin.
+BODY=$(PLUGIN_CONFIG="$PLUGIN_CONFIG" python3 - "$PLUGIN_ID" <<'PY'
+import json, os, sys
+cfg = json.loads(os.environ["PLUGIN_CONFIG"])
+print(json.dumps({"PluginSettings": {"Plugins": {sys.argv[1]: cfg}}}))
+PY
+) || die "the plugin configuration is not valid JSON"
+
+mm PUT /config/patch "$BODY" >/dev/null || die "could not write the Agents plugin configuration"
+
+# ---------------------------------------------------------------------------
+# 2. Install
+# ---------------------------------------------------------------------------
+# ORDER MATTERS: the configuration above must already be written before this runs. See the
+# note at the top of section 1.
+#
 # Compare VERSIONS, not mere presence.
 #
 # The Mattermost image ships a prepackaged mattermost-ai, so a presence check always
@@ -99,65 +178,6 @@ else
     warn "${PLUGIN_ID} is running '${now_version:-none}', not ${want_version}. The LLM"
     warn "Bridge that Module 6 calls may be missing."
 fi
-
-# ---------------------------------------------------------------------------
-# 2. Configure
-# ---------------------------------------------------------------------------
-# apiKey must be non-empty. The Agents plugin rejects a blank key even for a local,
-# OpenAI compatible service, which fails every model fetch and inference call with a
-# "No valid keys" error. The value itself is never checked by the mock.
-log "pointing Agents at ${MOCK_LLM_URL}"
-
-read -r -d '' PLUGIN_CONFIG <<JSON || true
-{
-  "services": [
-    {
-      "id": "${SERVICE_ID}",
-      "name": "Lab Mock LLM",
-      "type": "openaicompatible",
-      "apiURL": "${MOCK_LLM_URL}",
-      "apiKey": "lab-dummy-key-must-not-be-blank",
-      "defaultModel": "lab-threat-analyst-v1",
-      "tokenLimit": 8192
-    }
-  ],
-  "bots": [
-    {
-      "id": "${BOT_NAME}",
-      "name": "${BOT_NAME}",
-      "displayName": "Threat Analyst",
-      "serviceID": "${SERVICE_ID}",
-      "customInstructions": "You are a security operations analyst assistant. Be concise and specific.",
-      "model": "lab-threat-analyst-v1",
-      "enableVision": false,
-      "disableTools": true,
-      "channelAccessLevel": 0,
-      "userAccessLevel": 0
-    }
-  ],
-  "defaultBotName": "${BOT_NAME}",
-  "allowedUpstreamHostnames": "workbench",
-  "enableCallSummary": false,
-  "enableTokenUsageLogging": false
-}
-JSON
-
-# Nest the plugin config under PluginSettings.Plugins.<id> and validate it as JSON on the
-# way through, so a typo in the heredoc fails here rather than silently half-configuring
-# the plugin.
-BODY=$(PLUGIN_CONFIG="$PLUGIN_CONFIG" python3 - "$PLUGIN_ID" <<'PY'
-import json, os, sys
-cfg = json.loads(os.environ["PLUGIN_CONFIG"])
-print(json.dumps({"PluginSettings": {"Plugins": {sys.argv[1]: cfg}}}))
-PY
-) || die "the plugin configuration is not valid JSON"
-
-mm PUT /config/patch "$BODY" >/dev/null || die "could not write the Agents plugin configuration"
-
-# A config change does not always reload plugin state cleanly, so bounce it.
-mm POST "/plugins/${PLUGIN_ID}/disable" >/dev/null || true
-sleep 2
-mm POST "/plugins/${PLUGIN_ID}/enable" >/dev/null || warn "re-enable failed"
 
 # ---------------------------------------------------------------------------
 # 3. Verify the mock is actually reachable and answering
