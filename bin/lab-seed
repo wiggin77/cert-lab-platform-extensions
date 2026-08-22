@@ -44,15 +44,46 @@ curl -sS -m 30 -X POST "${MM}/api/v4/users" \
     -d "{\"email\":\"${ADMIN_EMAIL}\",\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}" \
     >/dev/null 2>&1 || true
 
+# Retried, because this has failed once in a track run and it takes the whole track with
+# it: everything downstream needs this token. /api/v4/system/ping answers before the server
+# will authenticate, so "Mattermost is up" is not the same as "Mattermost will log you in",
+# and the account creation above is deliberately tolerant of errors, so a creation that did
+# not stick shows up here rather than there.
+#
+# Each attempt re-tries creation as well, since a failed create is the case a login retry
+# alone cannot fix.
 log "logging in as ${ADMIN_USER}"
 LOGIN_HEADERS=$(mktemp)
-curl -sS -m 30 -D "$LOGIN_HEADERS" -o /dev/null -X POST "${MM}/api/v4/users/login" \
-    -H 'Content-Type: application/json' \
-    -d "{\"login_id\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}"
+LOGIN_BODY=$(mktemp)
+MM_ADMIN_TOKEN=""
 
-MM_ADMIN_TOKEN=$(grep -i '^token:' "$LOGIN_HEADERS" | tr -d '\r' | awk '{print $2}')
-rm -f "$LOGIN_HEADERS"
-[ -n "$MM_ADMIN_TOKEN" ] || die "login as ${ADMIN_USER} produced no session token"
+for attempt in 1 2 3 4 5; do
+    curl -sS -m 30 -D "$LOGIN_HEADERS" -o "$LOGIN_BODY" -X POST "${MM}/api/v4/users/login" \
+        -H 'Content-Type: application/json' \
+        -d "{\"login_id\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}" >/dev/null 2>&1 || true
+
+    MM_ADMIN_TOKEN=$(grep -i '^token:' "$LOGIN_HEADERS" | tr -d '\r' | awk '{print $2}')
+    [ -n "$MM_ADMIN_TOKEN" ] && break
+
+    log "login attempt ${attempt} did not return a token, retrying"
+    sleep 3
+
+    curl -sS -m 30 -X POST "${MM}/api/v4/users" \
+        -H 'Content-Type: application/json' \
+        -d "{\"email\":\"${ADMIN_EMAIL}\",\"username\":\"${ADMIN_USER}\",\"password\":\"${ADMIN_PASS}\"}" \
+        >/dev/null 2>&1 || true
+done
+
+if [ -z "$MM_ADMIN_TOKEN" ]; then
+    # Show what the server said. The previous version discarded the body, so a failure here
+    # reported only that there was no token, never why.
+    echo "[${SCRIPT_NAME:-lab-seed}] last login response:" >&2
+    head -c 500 "$LOGIN_BODY" >&2; echo >&2
+    rm -f "$LOGIN_HEADERS" "$LOGIN_BODY"
+    die "login as ${ADMIN_USER} produced no session token after 5 attempts"
+fi
+
+rm -f "$LOGIN_HEADERS" "$LOGIN_BODY"
 export MM_ADMIN_TOKEN
 log "admin token acquired"
 
