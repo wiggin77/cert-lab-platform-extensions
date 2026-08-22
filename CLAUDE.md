@@ -272,6 +272,13 @@ what breaks it. `UseResponsesAPI` is left unset, so the service registers `ChatO
 Bifrost downgrades any Responses-API request rather than calling `/v1/responses`, which the
 mock does not serve.
 
+**The service completion endpoint still needs a bot.** Despite the name, the bridge calls
+`getBotByService(service)` and 404s if no configured bot references that service id
+(`api/api_llm_bridge.go:971`). `lab-configure-agents` happens to define bot
+`threat-analyst` against `lab-mock-llm`, so it resolves; deleting that bot as redundant
+would break the AI skill. The bot's `customInstructions` also become part of the prompt the
+mock classifies, so they must stay clear of the cue words below.
+
 **The mock LLM picks its answer from cues in the prompt.** `labsvc/src/mocks/llm.ts`
 `classify()` routes to `suggest_remediation` on any of remediat, mitigat, fix, respond,
 containment, next step, what should, and picks the severity fixture by looking for
