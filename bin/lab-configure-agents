@@ -6,7 +6,7 @@
 # of a public sandbox, removes per-learner token cost, works offline, and gives the
 # Module 6 grader text it can assert against. See DESIGN.md section 5.3.
 #
-# The config shape below is taken from the plugin source at v2.4.3
+# The config shape below is taken from the plugin source at v2.2.0
 # (config/config.go and llm/configuration.go), not from documentation:
 #
 #   Config.services[] -> llm.ServiceConfig { id, name, type, apiKey, apiURL, defaultModel }
@@ -166,6 +166,46 @@ if curl -sf -m 10 "${LABSVC}/mock/llm/v1/models" >/dev/null 2>&1; then
     log "mock LLM is serving /models"
 else
     warn "mock LLM did not answer at ${LABSVC}/mock/llm/v1/models. Is mm-labsvc running?"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Verify Agents actually accepted the bot
+# ---------------------------------------------------------------------------
+# Writing the config is not the same as the plugin using it. Agents builds its bot lineup
+# in EnsureBots, and a bot it rejects is skipped with a message that goes to the Mattermost
+# server log, which is in another container and invisible from here. The visible symptom is
+# a 404 "no bot found for service" from the LLM Bridge, at grading time, two challenges
+# later.
+#
+# Creating a Mattermost bot account is the observable side effect of EnsureBots accepting a
+# bot, so poll for that account and dump what is needed to diagnose it if it never appears.
+log "verifying the Agents bot exists"
+bot_ok=false
+for _ in $(seq 1 15); do
+    if mm GET "/users/username/${BOT_NAME}" >/dev/null 2>&1; then
+        bot_ok=true
+        break
+    fi
+    sleep 2
+done
+
+if [ "$bot_ok" = true ]; then
+    log "bot ${BOT_NAME} exists, so Agents accepted the configuration"
+else
+    warn "bot ${BOT_NAME} was not created, so Agents rejected or ignored the bot config."
+    warn "Module 6's AI skill will fail with 'no bot found for service: ${SERVICE_ID}'."
+    warn "--- ${PLUGIN_ID} config as actually stored:"
+    mm GET /config 2>/dev/null |
+        jq -c --arg id "$PLUGIN_ID" '.PluginSettings.Plugins[$id]
+            | {services: [.services[]? | {id, type, apiURL}],
+               bots: [.bots[]? | {name, serviceID}],
+               defaultBotName}' >&2 || warn "(could not read the stored config)"
+    warn "--- recent server log lines about the plugin:"
+    # The admin log endpoint is the only view of the Mattermost container's log from here.
+    mm GET "/logs?page=0&per_page=300" 2>/dev/null |
+        jq -r '.[]?' 2>/dev/null |
+        grep -iE "mattermost-ai|ensurebots|bot" | tail -15 >&2 ||
+        warn "(could not read the server log; EnableAdminLog may be off)"
 fi
 
 log "Agents configured against the mock LLM"

@@ -108,21 +108,28 @@ with `LAB_REPO_REF` rather than editing the setup script.
 
 ## Status
 
-Working end to end: the sandbox provisions, Mattermost and Postgres come up, seeding
-creates the team, channels, users, bots and tokens, the Agents plugin is wired to the mock
-LLM, and both services start. Twenty checks are registered across all six challenges, and
-they correctly fail work that has not been done.
+Working end to end on Instruqt: the sandbox provisions, Mattermost and Postgres come up,
+seeding creates the team, channels, users, bots and tokens, the Agents plugin is wired to
+the mock LLM, and both services start. Twenty checks are registered across all six
+challenges, they correctly fail work that has not been done, and a solution variant exists
+for every one.
+
+`instruqt track test` drives the whole track: for each challenge it runs the checks
+expecting failure, applies the solution, and runs them again expecting success.
+
+**Challenges 1 to 5 pass, 18 of 18 checks.** Challenge 6 passes its bundle check; its AI
+skill check is the last one being worked on.
 
 Outstanding:
 
-- Solution variants for challenges 3 to 6. Only `mod2` and `mod3` exist, so the solve
-  scripts for the rest will fail, and `instruqt track test` cannot go green past
-  challenge 2.
-- The challenge 5 and 6 plugin scaffold.
+- Nothing in Module 6's interface has been looked at in a browser. The grader inspects the
+  webapp bundle for the three registrations and says so explicitly, rather than implying it
+  proved the components render. Layout, opening the sidebar from the post card, and the
+  header count updating all need eyes on them once.
 - A baked VM image. Setup installs Node and Go at run time, which hot start absorbs
   because hot start runs track-level setup during pre-warm, but baking would remove it.
-- CI. The intended loop is: apply each solution variant, run that challenge's checks,
-  expect a pass. That is what keeps the track from rotting as the codebase moves.
+- CI outside Instruqt. `instruqt track test` covers the apply-and-check loop today, but it
+  needs a live sandbox, so it is not something a pull request can run.
 
 ## Notes on the curriculum
 
