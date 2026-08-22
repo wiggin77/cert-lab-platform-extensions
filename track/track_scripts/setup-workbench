@@ -181,6 +181,24 @@ EOF
 
 "${LAB_ROOT}/bin/lab-seed"
 
+# The learner has to be able to read this. Module 6 tells them to run `make deploy`, which
+# uploads a plugin over the REST API, and that needs the admin token. Instruqt runs
+# lifecycle scripts under a umask that leaves the file mode 600, so without this the
+# deploy fails with "No admin token" while everything else about the build succeeded.
+#
+# This is not a security boundary being dropped. The learner has sudo, so the token was
+# always reachable, and plugin installation is an admin operation by definition.
+chmod 644 "$LAB_ENV"
+
+# Assert it, rather than assuming the chmod above was the whole story. If something else
+# is blocking the read (a directory mode, a mount option), this says so here instead of
+# surfacing 20 minutes later as a failed plugin deploy.
+if su -l "$LEARNER" -c "test -r ${LAB_ENV}"; then
+    log "${LAB_ENV} is readable by ${LEARNER} (mode $(stat -c %a "$LAB_ENV"))"
+else
+    log "WARNING: ${LEARNER} cannot read ${LAB_ENV} (mode $(stat -c %a "$LAB_ENV")). Module 6's make deploy will fail."
+fi
+
 # lab-configure-agents runs later, after mm-labsvc is up. It points the Agents plugin at
 # the mock LLM and then probes that the mock answers, and the probe cannot pass before the
 # service serving it exists. Running it here made that check dead code: it warned on every

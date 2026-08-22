@@ -87,7 +87,10 @@ deploy: bundle
 	@echo "--- uploading to $(MM_URL)"
 	@token="$${MM_ADMIN_TOKEN:-$$(sed -n 's/^MM_ADMIN_TOKEN=//p' $(LAB_ENV) 2>/dev/null | tail -1)}"; \
 	if [ -z "$$token" ]; then \
-		echo "No admin token. Set MM_ADMIN_TOKEN, or check $(LAB_ENV)." >&2; \
+		echo "No admin token: MM_ADMIN_TOKEN is unset and $(LAB_ENV) yielded nothing." >&2; \
+		echo "Deploying a plugin is an admin operation, so it needs the token. Either" >&2; \
+		echo "export MM_ADMIN_TOKEN, or make sure you can read $(LAB_ENV):" >&2; \
+		ls -l $(LAB_ENV) >&2 2>/dev/null || echo "  $(LAB_ENV) does not exist" >&2; \
 		exit 1; \
 	fi; \
 	code=$$(curl -sS -m 300 -o /tmp/plugin-upload.json -w '%{http_code}' \

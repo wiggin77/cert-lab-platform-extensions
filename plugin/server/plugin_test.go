@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,6 +71,45 @@ func TestCaptureIgnoresPostsWithoutAnAttachment(t *testing.T) {
 	p.MessageHasBeenPosted(nil, post)
 
 	assert.Empty(t, store, "the hook captured a plain message as though it were an alert")
+}
+
+// ---------------------------------------------------------------------------
+// The post type hook (scaffold behaviour, not a task)
+// ---------------------------------------------------------------------------
+//
+// MessageWillBePosted sees every post on the server, so the cases that must return "no
+// change" matter more than the one that stamps. A bug here does not break alerts, it
+// breaks posting.
+
+func TestPostTypeStampedOnAlerts(t *testing.T) {
+	p, _ := newTestPlugin(t)
+
+	modified, reason := p.MessageWillBePosted(nil, alertPost(t, testAlertsChannelID, defaultAlertFields()))
+
+	require.Equal(t, "", reason, "an alert must never be rejected")
+	require.NotNil(t, modified, "the alert was not stamped, so the post card can never render")
+	assert.Equal(t, alertPostType, modified.Type)
+}
+
+func TestPostTypeLeavesEverythingElseAlone(t *testing.T) {
+	p, _ := newTestPlugin(t)
+
+	reply := alertPost(t, testAlertsChannelID, defaultAlertFields())
+	reply.RootId = "somerootpostid000000000000"
+
+	cases := map[string]*model.Post{
+		"a post in another channel":      alertPost(t, "someotherchannelid00000000", defaultAlertFields()),
+		"a plain message in the channel": alertPost(t, testAlertsChannelID, nil),
+		"a threaded reply":               reply,
+	}
+
+	for name, post := range cases {
+		t.Run(name, func(t *testing.T) {
+			modified, reason := p.MessageWillBePosted(nil, post)
+			assert.Nil(t, modified, "returning a post here rewrites something that is not an alert")
+			assert.Equal(t, "", reason, "a non-empty reason rejects the post and blocks the user")
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------

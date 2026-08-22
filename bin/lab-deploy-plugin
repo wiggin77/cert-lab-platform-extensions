@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#
+# Builds, uploads, and enables the learner's plugin, then waits for it to be running.
+#
+# Used by the Module 6 solve scripts, and useful by hand when a deploy looks like it did
+# nothing. Unlike the handler, which tsx watch reloads on save, a plugin does not exist on
+# the server until it has been built, uploaded, and enabled.
+#
+# The wait at the end is the part that is easy to leave out. Upload and enable both return
+# before the plugin process is actually up, so checking immediately afterwards catches it
+# mid-activation and reads as "installed but not running".
+#
+set -euo pipefail
+SCRIPT_NAME=lab-deploy-plugin
+# shellcheck source=lab-common.sh
+source "$(dirname "$(readlink -f "$0")")/lab-common.sh"
+
+LEARNER="${LAB_LEARNER:-learner}"
+PLUGIN_DIR="${PLUGIN_DIR:-/home/${LEARNER}/plugin}"
+PLUGIN_ID="${LAB_PLUGIN_ID:-$(lab_env_get LAB_PLUGIN_ID || echo com.mattermost.cert-alerts)}"
+
+MM_ADMIN_TOKEN="${MM_ADMIN_TOKEN:-$(lab_env_get MM_ADMIN_TOKEN || true)}"
+[ -n "$MM_ADMIN_TOKEN" ] || die "MM_ADMIN_TOKEN not available. Run lab-seed first."
+export MM_ADMIN_TOKEN
+
+[ -d "$PLUGIN_DIR" ] || die "no plugin directory at ${PLUGIN_DIR}"
+
+# As the learner, so the build reuses the caches warmed during track setup and leaves
+# nothing root owned in their tree for them to trip over afterwards.
+log "building and deploying from ${PLUGIN_DIR}"
+if [ "$(id -u)" -eq 0 ]; then
+    su -l "$LEARNER" -c "cd '${PLUGIN_DIR}' && make deploy" 2>&1 | sed 's/^/  /'
+else
+    (cd "$PLUGIN_DIR" && make deploy) 2>&1 | sed 's/^/  /'
+fi
+
+log "waiting for ${PLUGIN_ID} to report active"
+for _ in $(seq 1 30); do
+    if mm GET /plugins 2>/dev/null |
+        jq -e --arg id "$PLUGIN_ID" '.active[]? | select(.id == $id)' >/dev/null 2>&1; then
+        log "${PLUGIN_ID} is active"
+        exit 0
+    fi
+    sleep 2
+done
+
+echo "[${SCRIPT_NAME}] ${PLUGIN_ID} did not become active within 60s." >&2
+echo "[${SCRIPT_NAME}] Plugin states reported by the server:" >&2
+mm GET /plugins 2>/dev/null | jq -c '{active: [.active[]?.id], inactive: [.inactive[]?.id]}' >&2 || true
+echo "[${SCRIPT_NAME}] A plugin that uploads but will not activate has usually panicked" >&2
+echo "[${SCRIPT_NAME}] on startup. Check the Mattermost server log for its OnActivate." >&2
+exit 1

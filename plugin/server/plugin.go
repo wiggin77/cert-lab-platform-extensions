@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/plugin"
 )
 
@@ -20,6 +21,10 @@ type Plugin struct {
 	// The alerts channel is resolved once and cached. See alerts_channel.go.
 	alertsChannelLock sync.RWMutex
 	alertsChannelID   string
+
+	// Bot that authors the plugin's own posts, such as an AI skill's answer. Set once at
+	// activation and only read afterwards, so it needs no lock.
+	botID string
 }
 
 func (p *Plugin) OnActivate() error {
@@ -29,6 +34,22 @@ func (p *Plugin) OnActivate() error {
 	// channel look like a broken build.
 	if _, err := p.resolveAlertsChannel(); err != nil {
 		p.API.LogWarn("could not resolve the alerts channel yet, will retry on the first post", "error", err.Error())
+	}
+
+	// A plugin's posts need an author. EnsureBotUser is idempotent, so this is safe on
+	// every activation, and a bot is preferable to posting as whichever user happened to
+	// click the button: the answer is the plugin's, not theirs.
+	botID, err := p.API.EnsureBotUser(&model.Bot{
+		Username:    "soc-alerts",
+		DisplayName: "SOC Alerts",
+		Description: "Posts alert analysis from the SOC Alerts plugin.",
+	})
+	if err != nil {
+		// Not fatal. Everything except the plugin's own posts still works, and failing
+		// activation here would present as a broken build.
+		p.API.LogWarn("could not ensure the plugin bot, AI skill replies will fail", "error", err.Error())
+	} else {
+		p.botID = botID
 	}
 
 	p.API.LogInfo("alerts plugin activated")

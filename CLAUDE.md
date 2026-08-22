@@ -221,7 +221,63 @@ that does not say which rule was broken.
 **Deploy is an API upload, not a file copy.** Mattermost runs in its own container, so its
 plugin directory is not on the workbench. `make deploy` POSTs to `/api/v4/plugins` with
 `force=true`, then `/api/v4/plugins/{id}/enable`. Both return before the plugin process is
-actually up, so the solve script polls `/api/v4/plugins` for the id under `active`.
+actually up, so `bin/lab-deploy-plugin` polls `/api/v4/plugins` for the id under `active`.
+
+**`/etc/lab.env` is explicitly chmod 644 by setup.** Instruqt runs lifecycle scripts under
+a umask that leaves it 600, and `make deploy` reads `MM_ADMIN_TOKEN` out of it as the
+learner. Without the chmod every step of the build succeeds and only the upload fails. Not
+a boundary being dropped: the learner has sudo, and installing a plugin is an admin
+operation by definition. Setup asserts the learner can read it and warns if not.
+
+### Calling the Agents plugin
+
+Inter-plugin calls go through `p.API.PluginHTTP(req)` with a **path-only** URL of the form
+`/<destination-plugin-id>/<path>`; the server splits the id off the front
+(`channels/app/plugin_api.go:1337`). For a completion:
+
+    POST /mattermost-ai/bridge/v1/completion/service/lab-mock-llm/nostream
+    {"posts":[{"role":"user","message":"..."}]}  ->  {"completion":"..."}
+
+Auth needs nothing from the caller. The server sets `Mattermost-Plugin-ID` on inter-plugin
+requests and deletes it from anything arriving externally
+(`channels/app/plugin_requests.go:98` and `:190`), so it cannot be forged, and the Agents
+bridge routes require it. No API key is involved: the trust boundary is the server.
+
+The Agents plugin publishes `public/bridgeclient` for this, and `server/agents.go`
+deliberately does **not** import it. That package lives in the main
+`mattermost-plugin-agents` module, whose `go.mod` requires **Go 1.26.4** and which pulls in
+the plugin's whole dependency tree, for three structs.
+
+**The mock LLM picks its answer from cues in the prompt.** `labsvc/src/mocks/llm.ts`
+`classify()` routes to `suggest_remediation` on any of remediat, mitigat, fix, respond,
+containment, next step, what should, and picks the severity fixture by looking for
+"critical" or "high". So an analyse prompt must avoid those words and must include the
+severity, or the reply comes back as remediation text and the check looking for "threat
+surface assessment" fails.
+
+### The custom post card
+
+`MessageWillBePosted` in `server/posttype.go` stamps `post.Type = "custom_soc_alert"`. This
+is scaffold, not a learner task, and it is what makes the post card reachable at all: the
+feed is an external system and has no reason to know about a type this plugin invented.
+
+Verified in the webapp source rather than assumed:
+
+- An unregistered custom type **falls through to normal rendering**
+  (`post_message_view.tsx:142`), so stamping is safe in challenge 5 when no component is
+  registered yet.
+- When a component **is** registered, `PostBodyAdditionalContent` is skipped
+  (`message_with_additional_content.tsx:46`), so attachments do not double-render
+  underneath the card. That is the "you own the whole render" lesson, literally.
+- `hasPlugin` matches on `post.type` while `PostMessageView` prefers `post.props.type`, so
+  set `post.Type` and not a prop, or the two disagree.
+- `findAlertPost` in the grader matches on props and attachment content, never on
+  `post.type`, so stamping does not disturb any check.
+
+Hook contract, from `public/plugin/hooks.go`: return `(nil, "")` to allow unchanged,
+`(post, "")` to replace, `(nil, "reason")` to reject. Every non-alert path returns
+`(nil, "")`. This hook sees every post on the server, so a mistake in it does not break
+alerts, it breaks posting. There are tests for exactly that.
 
 **A phony Make target must not share a name with a real directory.** `make webapp` alongside
 `webapp/` works only while the `.PHONY` line survives, and then stops rebuilding with no
@@ -230,8 +286,9 @@ error. The targets are `build-server` and `build-webapp`.
 ### Tests are the inner loop
 
 `plugin/server/*_test.go` ships in the scaffold, so `make test` is a spec the learner can
-run without deploying: 14 tests in ~50ms against an in-memory KV Store, versus most of a
-minute for a deploy plus a stimulus. They fail on the untouched scaffold by design.
+run without deploying: 16 tests in ~50ms against an in-memory KV Store, versus most of a
+minute for a deploy plus a stimulus. The 10 covering the learner's tasks fail on the
+untouched scaffold by design; the post type ones pass, because that is scaffold behaviour.
 
 The KV mock is backed by a real map, not per-call expectations, so a test can write and read
 back the way the plugin does at runtime. `AssertExpectations` is deliberately **not** used:
@@ -264,18 +321,19 @@ drift.
 Built: journal, both proxies, all three mocks (feed, threat intel, OpenAI compatible LLM),
 grader framework, checks for all six challenges, snapshot and reset, inspector UI, handler
 scaffold, the Instruqt track configuration, the plugin scaffold with its test suite, and
-solution variants for modules 2 to 5 plus `mod6-server`.
+solution variants for every module including `mod6-server` and `mod6-webapp`.
 
 Challenges 1 to 4 pass end to end on Instruqt, 14 out of 14 checks.
 
-Not built: the `mod6-webapp` variant (post card, RHS pane, header widget), the plugin's
-`/api/v1/alert/{id}/analyze` endpoint and its Agents plugin bridge, the CI loop described
-above, and a baked VM image with the toolchains pre-installed.
+Challenges 5 and 6 are verified locally only: both halves build, vet, gofmt and typecheck
+clean, all 16 Go tests pass against the solution, and the solution bundle is 6.4 KB
+containing all three registry symbols. Neither has yet completed a full Instruqt run.
 
-**The custom post card cannot render yet.** `registerPostTypeComponent` matches on
-`post.Type`, and the feed posts alerts with no custom type, so a correct card is never
-reached. The grader only inspects the bundle for the registration, and says so, but the
-learner would build something invisible. The fix is for the scaffold to stamp
-`post.Type = "custom_soc_alert"` in `MessageWillBePosted` (the *Will* hook, since
-`MessageHasBeenPosted` cannot change a saved post). Deliberately deferred to the webapp
-challenge so it can be verified in a browser alongside the component that consumes it.
+Not built: the CI loop described above, and a baked VM image with the toolchains
+pre-installed.
+
+**Nothing in Module 6's UI has been seen in a browser.** The grader inspects the bundle for
+registrations and says outright that it does not verify rendering. The reasoning behind the
+components is checked against webapp source (see the post card notes above), but layout,
+whether the RHS opens from the card, and whether the header count actually updates all need
+a human to look at them once.

@@ -14,7 +14,8 @@
 
 import type {AlertCount, AlertRecord} from './types';
 
-const PLUGIN_ID = 'com.mattermost.cert-alerts';
+/** Exported because the plugin's redux state is keyed by it. See registerReducer. */
+export const PLUGIN_ID = 'com.mattermost.cert-alerts';
 
 /** Plugin endpoints hang off the root, not off /api/v4. */
 const BASE = `/plugins/${PLUGIN_ID}/api/v1`;

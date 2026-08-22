@@ -36,6 +36,10 @@ func (p *Plugin) router() *mux.Router {
 
 	// Your routes go here.
 
+	// Already wired for you. The handler is in analyze.go and you write it in the next
+	// challenge, so leave this line alone for now.
+	api.HandleFunc("/alert/{postID}/analyze", p.handleAnalyze).Methods(http.MethodPost)
+
 	// Set on both, because a subrouter does not inherit its parent's NotFoundHandler.
 	// Without the second line, an unmatched path under /api/v1 answers with net/http's
 	// plain text 404 while everything else here answers JSON.

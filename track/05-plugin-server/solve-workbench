@@ -8,34 +8,9 @@
 #
 set -euo pipefail
 
-LEARNER=learner
 PLUGIN_DIR=/home/learner/plugin
-PLUGIN_ID=com.mattermost.cert-alerts
-MM=http://mattermost:8065
 
 PLUGIN_DIR="$PLUGIN_DIR" /opt/lab/variants/apply-variant.sh mod6-server solution
-chown -R "${LEARNER}:${LEARNER}" "$PLUGIN_DIR"
+chown -R learner:learner "$PLUGIN_DIR"
 
-# As the learner, so the build reuses the caches warmed during track setup and leaves
-# nothing root owned behind for them to trip over afterwards.
-if ! su -l "$LEARNER" -c "cd ~/plugin && make deploy" 2>&1 | sed 's/^/  /'; then
-    echo "make deploy failed" >&2
-    exit 1
-fi
-
-# Upload and enable both return before the plugin process is up. Checking immediately
-# after can catch it mid-activation, which reads as a plugin that installed but is not
-# running, so wait for the server to actually report it active.
-TOKEN=$(sed -n 's/^MM_ADMIN_TOKEN=//p' /etc/lab.env | tail -1)
-for _ in $(seq 1 30); do
-    if curl -sf -m 5 "${MM}/api/v4/plugins" -H "Authorization: Bearer ${TOKEN}" |
-        jq -e --arg id "$PLUGIN_ID" '.active[]? | select(.id == $id)' >/dev/null 2>&1; then
-        echo "${PLUGIN_ID} is active"
-        exit 0
-    fi
-    sleep 2
-done
-
-echo "${PLUGIN_ID} did not become active within 60s" >&2
-curl -sf -m 5 "${MM}/api/v4/plugins" -H "Authorization: Bearer ${TOKEN}" | jq . >&2 || true
-exit 1
+exec /opt/lab/bin/lab-deploy-plugin
