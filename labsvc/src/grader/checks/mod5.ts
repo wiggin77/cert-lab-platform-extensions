@@ -213,20 +213,31 @@ async function validationRejects(ctx: CheckContext): Promise<CheckResult> {
         notes: elementName(dialog, /note/i, FALLBACK_NAMES.notes),
     }
 
+    // Both submissions carry a marker in the notes field, which an escalation post would
+    // render. That is how a leaked post is identified below: by content, not by counting.
+    //
+    // Counting was wrong and intermittently failed a correct handler. Module 3's
+    // auto-escalation is still live from challenge 2 onward, so every stimulus alert this
+    // grader fires lands a post in #incidents a second or two later, asynchronously. The
+    // previous check in this very challenge fires one. A count cannot tell that post apart
+    // from a real leak, and the two snapshots were taken over different windows (2s before,
+    // 10s after), so a post arriving in the gap was attributed to this check's submissions.
+    const marker = `invalid-submission-${ctx.runId}`
+
     const cases: Array<{label: string; submission: Record<string, unknown>; expect: string}> = [
         {
             label: 'Severity blank',
             expect: names.severity,
-            submission: {[names.severity]: '', [names.affected]: 'DC-02', [names.assignee]: 'analyst', [names.notes]: 'x'},
+            submission: {[names.severity]: '', [names.affected]: 'DC-02', [names.assignee]: 'analyst', [names.notes]: marker},
         },
         {
             label: 'Affected Systems blank',
             expect: names.affected,
-            submission: {[names.severity]: 'CRITICAL', [names.affected]: '', [names.assignee]: 'analyst', [names.notes]: 'x'},
+            submission: {[names.severity]: 'CRITICAL', [names.affected]: '', [names.assignee]: 'analyst', [names.notes]: marker},
         },
     ]
 
-    const before = (await ctx.mm.getChannelPosts(config.channels.incidents, {since: Date.now() - 2000})).length
+    const since = Date.now() - 1000
 
     for (const testCase of cases) {
         const {status, body} = await submit(testCase.submission, 'graderstate')
@@ -262,13 +273,16 @@ async function validationRejects(ctx: CheckContext): Promise<CheckResult> {
         }
     }
 
-    await new Promise((r) => setTimeout(r, 2000))
-    const after = (await ctx.mm.getChannelPosts(config.channels.incidents, {since: Date.now() - 10_000})).length
-    if (after > before) {
+    // Give a wrongly-posted escalation time to land. Absence needs a wait; presence does not.
+    await new Promise((r) => setTimeout(r, 2500))
+
+    const posts = await ctx.mm.getChannelPosts(config.channels.incidents, {since})
+    const leaked = posts.find((p) => JSON.stringify(p).includes(marker))
+    if (leaked) {
         return fail(
             id,
             title,
-            'An invalid submission still produced a post in #incidents.',
+            `An invalid submission still produced a post in #incidents (${leaked.id}).`,
             'Return the errors and stop. Do not post until validation passes.',
         )
     }

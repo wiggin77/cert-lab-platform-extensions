@@ -180,7 +180,11 @@ LOG_LEVEL=info
 EOF
 
 "${LAB_ROOT}/bin/lab-seed"
-"${LAB_ROOT}/bin/lab-configure-agents" || log "WARNING: Agents setup failed, Module 6 AI skills will not work"
+
+# lab-configure-agents runs later, after mm-labsvc is up. It points the Agents plugin at
+# the mock LLM and then probes that the mock answers, and the probe cannot pass before the
+# service serving it exists. Running it here made that check dead code: it warned on every
+# single run, which trains you to ignore the one time it means something.
 
 mkdir -p /var/lib/labsvc
 chown -R "${LEARNER}:${LEARNER}" "$LEARNER_HOME"
@@ -310,6 +314,10 @@ systemctl enable --now mm-handler
 wait_for http://localhost:3000/healthz "handler" 60 mm-handler
 
 systemctl enable --now "code-server@${LEARNER}"
+
+# Now that the mock LLM is actually being served, point the Agents plugin at it. Non-fatal:
+# everything except Module 6's AI skills works without it.
+"${LAB_ROOT}/bin/lab-configure-agents" || log "WARNING: Agents setup failed, Module 6 AI skills will not work"
 
 log "setup complete"
 exit 0
