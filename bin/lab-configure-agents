@@ -202,9 +202,15 @@ else
                defaultBotName}' >&2 || warn "(could not read the stored config)"
     warn "--- recent server log lines about the plugin:"
     # The admin log endpoint is the only view of the Mattermost container's log from here.
+    #
+    # The patterns are the ones Agents' own EnsureBots path emits, taken from
+    # bots/bots.go and bots/getLLM. The last two matter most: getLLM returning an error
+    # aborts EnsureBots before it publishes the bot list, so a single unusable service
+    # leaves GetAllBots empty and every service reports "no bot found".
     mm GET "/logs?page=0&per_page=300" 2>/dev/null |
         jq -r '.[]?' 2>/dev/null |
-        grep -iE "mattermost-ai|ensurebots|bot" | tail -15 >&2 ||
+        grep -iE "mattermost-ai|EnsureBots|Failed to ensure bot|Configured bot is not valid|Bot references|Unsupported service type|Bifrost" |
+        tail -20 >&2 ||
         warn "(could not read the server log; EnableAdminLog may be off)"
 fi
 
