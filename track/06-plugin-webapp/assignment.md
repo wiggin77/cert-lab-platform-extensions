@@ -63,11 +63,14 @@ a post action.
 
 ## 3. AI skills
 
-Add two buttons to the pane: **Analyze Threat Surface** and **Suggest Remediation**.
+This one has a server half. Add two buttons to the pane, **Analyze Threat Surface** and
+**Suggest Remediation**, and write the endpoint they call in `server/analyze.go`. Its
+route is already registered, and `p.llmCompletion` in `server/agents.go` handles talking
+to the Agents plugin, so what is left to you is the prompt and the reply.
 
-Each calls your server endpoint, which passes the alert data as context to the Agents
-plugin and posts the response as a **threaded reply under the original alert**. Show a
-loading state while the call is in flight, because these are not instant.
+Build the prompt from the alert fields and post the answer as a **threaded reply under the
+original alert**. Show a loading state in the pane while the call is in flight, because
+these are not instant.
 
 ## 4. Channel header widget
 
@@ -92,3 +95,13 @@ response lands at channel root, detached from the alert it is about.
 
 **Reload the browser tab after `make deploy`.** The webapp bundle is cached, and a stale
 bundle looks exactly like code that does not work.
+
+**The post card and the pane never see each other.** They are rendered in different parts
+of the app, so "which alert is selected" cannot live in either one's props. Register a
+small reducer with `registerReducer` and keep it there. Mattermost namespaces your state
+under `plugins-<your plugin id>`.
+
+**Wording your prompt changes the answer you get.** The lab's LLM is deterministic and
+picks its response from cues in the text, so asking an "analyse" question with words like
+fix, respond, or next steps returns remediation advice instead. Real models are less
+literal about this but not immune to it.

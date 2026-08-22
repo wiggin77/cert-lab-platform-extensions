@@ -189,7 +189,12 @@ its challenge unsolvable, which also means CI can never verify a solution agains
 checks.
 
 **Threads cannot span channels.** Cross-channel escalations use a permalink, never a
-`root_id`. This contradicts the curriculum copy in Modules 3 and 5, which needs a rewrite.
+`root_id`. The source curriculum doc says otherwise for Modules 3 and 5; the lab
+assignments here already say the correct thing and call the constraint out explicitly, so
+this is a note for whoever revises the doc, not an open task in this repo.
+
+Note this is only true *across* channels. Module 6's AI reply threads under the alert with
+`root_id` precisely because both posts are in `~alerts`.
 
 **There is no HMAC signature on any Mattermost integration surface.** Outgoing webhooks and
 slash commands carry a plaintext shared token in the request body. Any lesson about
@@ -229,6 +234,14 @@ learner. Without the chmod every step of the build succeeds and only the upload 
 a boundary being dropped: the learner has sudo, and installing a plugin is an admin
 operation by definition. Setup asserts the learner can read it and warns if not.
 
+**The webapp's React and Redux pins are type-only.** `webpack.config.js` externalises
+react, react-dom, redux, react-redux and prop-types to the copies Mattermost already loaded
+on `window` (`webapp/channels/src/plugins/export.ts:132`), so the versions in
+`plugin/webapp/package.json` only ever affect typechecking. Bundling our own React would
+load a second copy and break hooks with an error that blames the component. Expect the pins
+to differ from what the server ships (Mattermost master is on react-redux 9 / redux 5);
+that is fine while only stable APIs are used, and is not worth chasing.
+
 ### Calling the Agents plugin
 
 Inter-plugin calls go through `p.API.PluginHTTP(req)` with a **path-only** URL of the form
@@ -247,6 +260,17 @@ The Agents plugin publishes `public/bridgeclient` for this, and `server/agents.g
 deliberately does **not** import it. That package lives in the main
 `mattermost-plugin-agents` module, whose `go.mod` requires **Go 1.26.4** and which pulls in
 the plugin's whole dependency tree, for three structs.
+
+**The `/v1` in the Agents `apiURL` is load bearing, and so is the fact that it looks
+wrong.** `lab-configure-agents` sets `apiURL` to `.../mock/llm/v1`, and v2.4.3 routes
+through Bifrost, which builds paths starting with `/v1/` itself. It does not double up:
+`openaicompatible` maps to the `OpenAI` provider (`bifrost/config.go:21`), and
+`normalizeOpenAIBaseURL` strips exactly one trailing `/v1` for that provider before Bifrost
+re-appends it, landing on `/mock/llm/v1/chat/completions`, which is the route the mock
+actually serves. Dropping the `/v1` from the config to "fix" the apparent duplication is
+what breaks it. `UseResponsesAPI` is left unset, so the service registers `ChatOnly` and
+Bifrost downgrades any Responses-API request rather than calling `/v1/responses`, which the
+mock does not serve.
 
 **The mock LLM picks its answer from cues in the prompt.** `labsvc/src/mocks/llm.ts`
 `classify()` routes to `suggest_remediation` on any of remediat, mitigat, fix, respond,
