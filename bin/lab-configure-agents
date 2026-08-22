@@ -21,7 +21,14 @@ SCRIPT_NAME=lab-configure-agents
 source "$(dirname "$(readlink -f "$0")")/lab-common.sh"
 
 PLUGIN_ID=mattermost-ai
-PLUGIN_VERSION="${AGENTS_VERSION:-v2.4.3}"
+
+# Pinned to v2.2.0, and the ceiling is not arbitrary: v2.4.x raised min_server_version to
+# 11.9.0 and the lab runs Mattermost 10.5, so it cannot be installed here at all. v2.2.0
+# still declares 6.2.1 and already has the LLM Bridge (public/bridgeclient plus the
+# /bridge/v1 routes) that Module 6's AI skill calls. v1.x has no bridge.
+#
+# Raising the Mattermost image is the way to move past v2.2.0, not bumping this alone.
+PLUGIN_VERSION="${AGENTS_VERSION:-v2.2.0}"
 # The release also publishes -fips builds. Use the plain linux-amd64 archive.
 PLUGIN_URL="https://github.com/mattermost/mattermost-plugin-agents/releases/download/${PLUGIN_VERSION}/mattermost-plugin-agents-${PLUGIN_VERSION}-linux-amd64.tar.gz"
 
@@ -38,24 +45,60 @@ wait_for_mattermost 60
 # ---------------------------------------------------------------------------
 # 1. Install
 # ---------------------------------------------------------------------------
-if mm GET "/plugins" | grep -q "\"${PLUGIN_ID}\""; then
-    log "${PLUGIN_ID} already installed"
+# Compare VERSIONS, not mere presence.
+#
+# The Mattermost image ships a prepackaged mattermost-ai, so a presence check always
+# reported "already installed" and this script never installed anything. The bundled build
+# predates the LLM Bridge, so the plugin has no /bridge/v1 routes, and a request to one
+# falls through to gin's NoRoute handler. That still runs the router's global middleware,
+# including the one requiring a Mattermost-User-Id, so an inter-plugin call (which has no
+# user) came back as a bodyless 401 rather than a 404. Nothing in the log said the wrong
+# version was running.
+want_version="${PLUGIN_VERSION#v}"
+
+installed_version() {
+    mm GET /plugins 2>/dev/null | jq -r --arg id "$PLUGIN_ID" \
+        '[(.active[]?), (.inactive[]?)] | map(select(.id == $id)) | .[0].version // ""'
+}
+
+have_version="$(installed_version || true)"
+
+if [ "$have_version" = "$want_version" ]; then
+    log "${PLUGIN_ID} ${have_version} already installed"
 else
-    log "downloading Agents ${PLUGIN_VERSION}"
+    log "installed ${PLUGIN_ID} is '${have_version:-none}', want ${want_version}: replacing"
     tmp=$(mktemp -d)
     curl -fsSL "$PLUGIN_URL" -o "${tmp}/agents.tar.gz" \
         || die "could not download ${PLUGIN_URL}"
 
     log "uploading the plugin ($(du -h "${tmp}/agents.tar.gz" | cut -f1))"
-    curl -sS -m 300 -X POST "${MM}/api/v4/plugins" \
+    # Check the status code. curl without -f treats an HTTP 400 as success, so the previous
+    # version of this would have swallowed a min_server_version rejection silently.
+    code=$(curl -sS -m 300 -o "${tmp}/upload.json" -w '%{http_code}' \
+        -X POST "${MM}/api/v4/plugins" \
         -H "Authorization: Bearer ${MM_ADMIN_TOKEN}" \
-        -F "plugin=@${tmp}/agents.tar.gz" -F 'force=true' >/dev/null \
-        || die "plugin upload failed"
+        -F "plugin=@${tmp}/agents.tar.gz" -F 'force=true')
+    if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+        warn "upload of ${PLUGIN_VERSION} returned HTTP ${code}:"
+        head -c 500 "${tmp}/upload.json" >&2; echo >&2
+        warn "Module 6's AI skill will not work. A min_server_version mismatch is the"
+        warn "usual cause: check it against the Mattermost image in track/config.yml."
+    fi
     rm -rf "$tmp"
 fi
 
 log "enabling ${PLUGIN_ID}"
 mm POST "/plugins/${PLUGIN_ID}/enable" >/dev/null || warn "enable returned an error, continuing"
+
+# Say which version is actually running. The whole failure above was invisible because
+# nothing ever printed this.
+now_version="$(installed_version || true)"
+if [ "$now_version" = "$want_version" ]; then
+    log "${PLUGIN_ID} ${now_version} is installed"
+else
+    warn "${PLUGIN_ID} is running '${now_version:-none}', not ${want_version}. The LLM"
+    warn "Bridge that Module 6 calls may be missing."
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Configure

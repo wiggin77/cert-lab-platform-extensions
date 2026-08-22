@@ -258,11 +258,28 @@ bridge routes require it. No API key is involved: the trust boundary is the serv
 
 The Agents plugin publishes `public/bridgeclient` for this, and `server/agents.go`
 deliberately does **not** import it. That package lives in the main
-`mattermost-plugin-agents` module, whose `go.mod` requires **Go 1.26.4** and which pulls in
-the plugin's whole dependency tree, for three structs.
+`mattermost-plugin-agents` module, whose `go.mod` requires a Go newer than the workbench
+has (1.26.2 at v2.2.0) and which pulls in the plugin's whole dependency tree, for three
+structs. The wire format is transcribed instead.
+
+**The Agents version is pinned to v2.2.0 and the ceiling is real.** v2.4.x raised
+`min_server_version` to 11.9.0 and the lab runs Mattermost 10.5, so it cannot install at
+all. v2.2.0 still declares 6.2.1 and already has the bridge. v1.x has no bridge. Moving
+past v2.2.0 means raising the Mattermost image first.
+
+**`lab-configure-agents` compares versions, not presence, and this is the whole point.**
+The Mattermost image ships a prepackaged `mattermost-ai`, so the original presence check
+reported "already installed" every time and the script never installed anything. The
+bundled build predates the bridge, so `/bridge/v1/...` matched no route, and gin's
+`NoRoute` handler still runs the router's global middleware, including the one demanding a
+`Mattermost-User-Id`. An inter-plugin call has no user, so the result was a **bodyless 401
+instead of a 404** and nothing in the log revealed that the wrong version was running.
+Two guards now exist: the upload checks its HTTP status (curl without `-f` treats a 400 as
+success, so a `min_server_version` rejection was being swallowed), and the script logs the
+version actually running afterwards.
 
 **The `/v1` in the Agents `apiURL` is load bearing, and so is the fact that it looks
-wrong.** `lab-configure-agents` sets `apiURL` to `.../mock/llm/v1`, and v2.4.3 routes
+wrong.** `lab-configure-agents` sets `apiURL` to `.../mock/llm/v1`, and v2.2.0 routes
 through Bifrost, which builds paths starting with `/v1/` itself. It does not double up:
 `openaicompatible` maps to the `OpenAI` provider (`bifrost/config.go:21`), and
 `normalizeOpenAIBaseURL` strips exactly one trailing `/v1` for that provider before Bifrost
