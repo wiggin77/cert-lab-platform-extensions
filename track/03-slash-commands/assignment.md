@@ -73,17 +73,15 @@ campaigns.
 
 ## 3. Test it
 
-Run the slash command in the **Mattermost** tab. To see what the intel API knows about,
-use the **Terminal** tab:
-
-In `~alerts`:
+In the **Mattermost** tab, in `~alerts`:
 
 ```
 /threat 203.0.113.47
 ```
 
 Not every indicator is known. Try `198.51.100.23`, which the API does not hold, and make
-sure your handler says so cleanly rather than returning an error. Browse the full set:
+sure your handler says so cleanly rather than returning an error. To browse the full set,
+switch to the **Terminal** tab:
 
 ```bash
 curl $LABSVC_URL/mock/intel/v1/_catalog | jq
