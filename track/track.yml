@@ -29,6 +29,7 @@ tags:
 - certification
 owner: mattermost
 developers:
+- eric@mattermost.com
 - doug.lauder@mattermost.com
 idle_timeout: 900
 timelimit: 16200
@@ -38,5 +39,5 @@ lab_config:
   feedback_tab_enabled: false
   loadingMessages: true
   hideStopButton: false
-checksum: "16551593343091933922"
+checksum: "10263925218103285109"
 enhanced_loading: false
