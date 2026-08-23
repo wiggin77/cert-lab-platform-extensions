@@ -120,8 +120,9 @@ the learner cannot invalidate by logging out.
 - Solution variants for modules 4, 5, and 6, so four of the six `solve-workbench` scripts
   will fail until those land.
 - The Module 6 plugin scaffold.
-- A baked VM image. Setup installs Node and Go at runtime, which hot start absorbs because
-  hot start runs track-level setup during pre-warm. Baking would remove it entirely.
+- Setup takes 5m38s on a clean sandbox, ~3m20s of it warming the Module 6 plugin build
+  caches. Hot start is not enabled on this track, so the learner waits for all of it.
+  Baking a custom VM image would remove it entirely.
 
 ## Deploying a change
 

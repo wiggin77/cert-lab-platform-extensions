@@ -52,6 +52,24 @@ containers:
     # this it refuses the connection and every integration in the track fails silently.
     MM_SERVICESETTINGS_ALLOWEDUNTRUSTEDINTERNALCONNECTIONS: "workbench localhost 127.0.0.1"
 
+    # Required for the WebSocket to connect, which is what makes the client feel alive:
+    # without it every channel needs a manual refresh and a red "Mattermost unreachable,
+    # ask your administrator to check WebSocket port" banner sits across the top.
+    #
+    # Mattermost origin-checks the WebSocket upgrade (and only the upgrade, which is why
+    # the REST API works and the channel list renders normally). The default checker
+    # compares the browser's Origin host AND scheme against SiteURL
+    # (channels/app/server.go OriginChecker). SiteURL here is the internal
+    # http://mattermost:8065, while the learner's browser arrives from
+    # https://<generated>.env.play.instruqt.com, so both halves mismatch.
+    #
+    # "*" is checked before SiteURL is consulted at all (channels/utils/api.go
+    # CheckOrigin), so it works without knowing the per-participant hostname Instruqt
+    # generates. Setting SiteURL to that hostname would be the tighter fix, but it is only
+    # knowable at runtime, and this is a single-participant sandbox that is destroyed at
+    # the end of the session.
+    MM_SERVICESETTINGS_ALLOWCORSFROM: "*"
+
     # Makes the curriculum's "5-second timeout" lesson in Module 4 literally true. The
     # default is far longer.
     MM_SERVICESETTINGS_OUTGOINGINTEGRATIONREQUESTSTIMEOUT: "5"
@@ -72,9 +90,11 @@ virtualmachines:
   # Docker is no longer needed here now that Mattermost and Postgres are containers, so a
   # stock Ubuntu base is enough. Verified to boot and run lifecycle scripts.
   #
-  # TODO: bake a custom image with the toolchains and node_modules pre-installed. Until
-  # then track setup installs them at runtime, which hot start absorbs because hot start
-  # runs track-level setup during pre-warm.
+  # TODO: bake a custom image with the toolchains, Go module cache and node_modules
+  # pre-installed. Track setup installs them at runtime and that is measured at 5m38s,
+  # ~3m20s of it the Go dependency tree for the Module 6 plugin. Hot start would move that
+  # before the learner arrives, but it is not enabled on this track, so today they watch
+  # all of it on the loading screen.
   image: ubuntu-os-cloud/ubuntu-2204-lts
   shell: /bin/bash
   machine_type: n1-standard-2

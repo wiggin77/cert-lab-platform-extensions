@@ -5,10 +5,17 @@
 # Mattermost and Postgres are separate container hosts, so nothing here provisions them.
 # This script's job is the VM: toolchains, the lab code, and the services.
 #
-# Learners cannot start until this exits 0. That sounds like a reason to keep it short,
-# but hot start runs track-level setup during pre-warm, before anyone clicks Launch, so
-# slow work here is absorbed as long as challenge-level setup stays trivial (ours is one
-# lab-module.sh call). Baking a custom VM image would remove it entirely.
+# Learners cannot start until this exits 0, and MEASURED IT IS SLOW: 5m38s on a clean
+# sandbox, of which about 3m20s is warming the plugin build caches in section 4b.
+#
+# Hot start would hide this by running track-level setup during pre-warm, before anyone
+# clicks Launch. It is NOT currently enabled on this track (there is no hot start setting
+# in track.yml, and it is configured per track in the Instruqt web UI, not by the CLI), so
+# right now a learner watches the whole thing on the loading screen. Earlier comments here
+# claimed hot start absorbed it, which was wishful.
+#
+# Two ways out, in order of effort: enable hot start on the track, or bake a custom VM
+# image with the toolchains, Go module cache and node_modules already present.
 #
 set -euo pipefail
 
@@ -96,7 +103,8 @@ apt-get install -y -qq nodejs >/dev/null
 log "node $(node --version), npm $(npm --version)"
 
 # Go is only needed for Module 6, but installing it here rather than in that challenge's
-# setup keeps it inside the hot start window.
+# setup keeps challenge-level setup trivial, and means a learner never waits mid-challenge
+# with a 30 minute timer running. Measured at 3s, so it is not what makes setup slow.
 log "installing Go ${GO_VERSION}"
 curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
 rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz
@@ -219,6 +227,12 @@ chmod 755 "$LEARNER_HOME"
 # Module 6 opens with `make deploy`. Without this, that first build downloads the whole
 # Go module graph and the webpack toolchain while the learner watches a stalled terminal,
 # inside a 30 minute challenge timer.
+#
+# THIS IS THE EXPENSIVE PART OF SETUP: measured at ~3m20s of a 5m38s total, dominated by
+# fetching and compiling the Go dependency tree. The trade is deliberate, because the
+# alternative spends it inside a timed challenge instead of on the loading screen, but it
+# is the first thing to attack. Baking it into a custom VM image removes it outright;
+# enabling hot start moves it before the learner arrives.
 #
 # It runs as the learner, not root, and that matters: a module cache under /root is not
 # readable by them, so the download would silently happen again on first build. Same for

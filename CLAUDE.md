@@ -289,6 +289,27 @@ what breaks it. `UseResponsesAPI` is left unset, so the service registers `ChatO
 Bifrost downgrades any Responses-API request rather than calling `/v1/responses`, which the
 mock does not serve.
 
+**The Agents webapp bundle is stripped before upload, and that is required.** Agents 2.2.0's
+webapp is far newer than the Mattermost 10.5 webapp it runs inside and throws during
+initialize. The damage is not contained to its own UI: the post editor renders "Something
+went wrong while loading the component" and opening the main menu blanks the whole client
+to a white screen. Confirmed by disabling the plugin in a live sandbox, after which the
+client renders normally. `lab-configure-agents` deletes `webapp/` from the release archive
+and removes the `webapp` key from its `plugin.json` (a declared bundle path with no bundle
+fails activation), then repacks. Nothing is lost: the lab only ever calls the server side
+LLM Bridge over `PluginHTTP`, and learners build their own alert UI in Module 6.
+
+**The WebSocket needs `ServiceSettings.AllowCorsFrom`.** Mattermost origin-checks the
+WebSocket upgrade and nothing else, comparing the browser's `Origin` host *and* scheme
+against `SiteURL` (`channels/app/server.go` `OriginChecker`). `SiteURL` is the internal
+`http://mattermost:8065` while the learner's browser arrives from
+`https://<generated>.env.play.instruqt.com`, so it is rejected and the client shows
+"Mattermost unreachable, ask your administrator to check WebSocket port" while the REST API
+keeps working, which is why the channel list renders fine. `"*"` is checked before `SiteURL`
+is consulted (`channels/utils/api.go` `CheckOrigin`), so it works without knowing the
+per-participant hostname. Note the webapp derives its own base URL from
+`window.location.origin`, not from `SiteURL`, so `SiteURL` is not what routes the client.
+
 **The Agents config goes under a single `Config` key, and nothing tells you when it does
 not.** Its `plugin.json` declares exactly one setting, `Config`, and it loads that into a
 struct whose only field is `config.Config` with an explicit `json:"config"` tag. An

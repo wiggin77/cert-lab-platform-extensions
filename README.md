@@ -117,8 +117,7 @@ for every one.
 `instruqt track test` drives the whole track: for each challenge it runs the checks
 expecting failure, applies the solution, and runs them again expecting success.
 
-**Challenges 1 to 5 pass, 18 of 18 checks.** Challenge 6 passes its bundle check; its AI
-skill check is the last one being worked on.
+**All six challenges pass, 20 of 20 checks**, end to end on Instruqt.
 
 Outstanding:
 
@@ -126,8 +125,11 @@ Outstanding:
   webapp bundle for the three registrations and says so explicitly, rather than implying it
   proved the components render. Layout, opening the sidebar from the post card, and the
   header count updating all need eyes on them once.
-- A baked VM image. Setup installs Node and Go at run time, which hot start absorbs
-  because hot start runs track-level setup during pre-warm, but baking would remove it.
+- Setup takes **5m38s** on a clean sandbox, and the learner currently watches all of it
+  on the loading screen. About 3m20s of that is warming the Module 6 plugin build caches,
+  mostly fetching and compiling the Go dependency tree. Hot start would move it before the
+  learner arrives but is not enabled on this track; baking a custom VM image with the
+  toolchains, Go module cache and node_modules would remove it outright.
 - CI outside Instruqt. `instruqt track test` covers the apply-and-check loop today, but it
   needs a live sandbox, so it is not something a pull request can run.
 

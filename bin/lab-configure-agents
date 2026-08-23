@@ -163,6 +163,44 @@ else
     curl -fsSL "$PLUGIN_URL" -o "${tmp}/agents.tar.gz" \
         || die "could not download ${PLUGIN_URL}"
 
+    # Strip the plugin's webapp before uploading. This is not tidying, it is required.
+    #
+    # Agents 2.2.0's webapp bundle is much newer than the Mattermost 10.5 webapp it has to
+    # run inside, and it throws during initialize. The damage is not confined to its own
+    # UI: the post editor renders "Something went wrong while loading the component", and
+    # opening the main menu blanks the entire client to a white screen. Confirmed by
+    # disabling the plugin, at which point the client renders normally again.
+    #
+    # Nothing of ours is lost. The only thing this lab wants from Agents is the server side
+    # LLM Bridge, called over PluginHTTP from our own plugin, and the learner builds their
+    # own alert UI in Module 6. The Agents UI would be a distraction even if it worked.
+    #
+    # The webapp key has to come out of plugin.json as well as the directory: a manifest
+    # that declares a bundle path with no bundle behind it fails on activation.
+    log "removing the plugin's webapp bundle (incompatible with this server's webapp)"
+    mkdir -p "${tmp}/x"
+    tar -xzf "${tmp}/agents.tar.gz" -C "${tmp}/x" || die "could not unpack the plugin"
+
+    agent_root="$(find "${tmp}/x" -mindepth 1 -maxdepth 1 -type d | head -1)"
+    [ -n "$agent_root" ] || die "unexpected plugin archive layout"
+
+    rm -rf "${agent_root}/webapp"
+    python3 - "${agent_root}/plugin.json" <<'PY' || die "could not rewrite plugin.json"
+import json, sys
+path = sys.argv[1]
+with open(path) as fh:
+    manifest = json.load(fh)
+manifest.pop("webapp", None)
+with open(path, "w") as fh:
+    json.dump(manifest, fh, indent=2)
+PY
+
+    # Repack preserving the archive's own top level directory name, which in this release
+    # happens to be the plugin id. Do not rename it: the bundle must keep a single top
+    # level directory with plugin.json at its root.
+    tar -czf "${tmp}/agents.tar.gz" -C "${tmp}/x" "$(basename "$agent_root")" \
+        || die "could not repack the plugin"
+
     log "uploading the plugin ($(du -h "${tmp}/agents.tar.gz" | cut -f1))"
     # Check the status code. curl without -f treats an HTTP 400 as success, so the previous
     # version of this would have swallowed a min_server_version rejection silently.
