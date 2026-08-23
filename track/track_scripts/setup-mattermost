@@ -73,7 +73,18 @@ if ! mm_running; then
     # setsid so the server survives this script exiting: Instruqt may reap the script's
     # process group, and a plain background job would go with it.
     # su -m keeps the MM_* environment, which is how this deployment is configured.
-    ( cd /mattermost && setsid nohup su -m mattermost -c '/mattermost/bin/mattermost server' \
+    #
+    # Wrapped in a respawn loop rather than started once. A single relaunch was enough to
+    # satisfy this script and still leave the track broken: the server answered the ping
+    # here, this script exited 0, and by the time the workbench waited for it the server
+    # was gone again, so setup failed 5 minutes later on a host that cannot see this log.
+    # Nothing supervises Mattermost in an Instruqt container. PID 1 is the sandbox agent
+    # and there is no restart policy, so whatever kills it once wins permanently.
+    #
+    # The loop costs nothing when the server is healthy and makes a second death
+    # self-healing whether the cause is a lost race, a reaped process, or a crash.
+    ( cd /mattermost && setsid nohup bash -c \
+        'while :; do su -m mattermost -c "/mattermost/bin/mattermost server"; echo "[mm] server exited, respawning in 5s"; sleep 5; done' \
         >> /mattermost/logs/relaunch.log 2>&1 & ) 2>/dev/null
 
     for _ in $(seq 1 60); do
@@ -82,8 +93,40 @@ if ! mm_running; then
     done
 
     if ping_ok; then
-        say "relaunch succeeded: $(curl -s -m 5 http://localhost:8065/api/v4/system/ping 2>/dev/null)"
-        exit 0
+        # Do not trust the first successful ping. The failure this is guarding against
+        # answered a ping and then died, so confirm it is still serving a little later.
+        # 30s is not a guarantee, but it separates "started and stayed up" from "started
+        # and immediately died again", and the workbench does not begin waiting instantly.
+        say "relaunch answered a ping, confirming it stays up"
+        stable=yes
+        for _ in $(seq 1 10); do
+            sleep 3
+            ping_ok || { stable=no; break; }
+        done
+
+        if [ "$stable" = yes ]; then
+            say "relaunch succeeded and held for 30s: $(curl -s -m 5 http://localhost:8065/api/v4/system/ping 2>/dev/null)"
+            exit 0
+        fi
+
+        # It died after answering. This is the case that produced a green setup-mattermost
+        # and a failed track, so say so loudly and dump what the old code threw away.
+        say "WARNING: the server answered and then stopped responding again."
+        say "The respawn loop above should bring it back, but here is why it died:"
+        while IFS= read -r line; do say "relaunch ${line:0:300}"; done < <(tail -20 /mattermost/logs/relaunch.log 2>/dev/null)
+        while IFS= read -r line; do say "err ${line:0:300}"; done < <(grep -iE '"level":"(error|fatal|panic)"' "$LOG" 2>/dev/null | tail -8)
+
+        # Give the respawn loop a chance before handing over to the workbench, which fails
+        # the track if it cannot reach Mattermost.
+        for _ in $(seq 1 60); do
+            ping_ok && break
+            sleep 2
+        done
+        if ping_ok; then
+            say "the respawn loop recovered the server"
+            exit 0
+        fi
+        say "the server is still down after waiting for the respawn loop"
     fi
     say "relaunch did not bring the server up. Last relaunch output:"
     while IFS= read -r line; do say "relaunch ${line:0:300}"; done < <(tail -15 /mattermost/logs/relaunch.log 2>/dev/null)
