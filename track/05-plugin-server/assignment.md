@@ -24,9 +24,10 @@ tabs:
   port: 8065
 - id: ymc6wtx80ayy
   title: Editor
-  type: code
+  type: service
   hostname: workbench
-  path: /home/learner/plugin
+  port: 8080
+  path: /?folder=/home/learner/plugin
 - id: fizaii2l5pkg
   title: Lab Inspector
   type: service
@@ -73,6 +74,8 @@ The count endpoint is what the channel header widget reads in the next challenge
 records at status `open` rather than caching a value at activation, or it will drift.
 
 ## 3. Build and deploy
+
+All of this runs in the **Terminal** tab.
 
 There are tests for everything above, and they are the fast way to work. They run against
 an in-memory KV Store with no server involved, so they finish in under a second:

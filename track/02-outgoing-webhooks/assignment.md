@@ -23,9 +23,10 @@ tabs:
   port: 8065
 - id: e8qzzypo9h7i
   title: Editor
-  type: code
+  type: service
   hostname: workbench
-  path: /home/learner/handler
+  port: 8080
+  path: /?folder=/home/learner/handler
 - id: poowj5xabgza
   title: Lab Inspector
   type: service
@@ -57,7 +58,7 @@ your endpoint when a message matches a trigger word you configure.
 | Trigger Words | `CRITICAL` |
 | Callback URLs | `http://workbench:4000/hooks/outgoing` |
 
-Then copy the **token** it shows you and register it:
+Then copy the **token** it shows you, switch to the **Terminal** tab, and register it:
 
 ```bash
 sudo lab-set-token outgoing '<paste the token here>'
@@ -75,7 +76,22 @@ Edit `src/routes/outgoing-webhook.ts`:
 3. **Post** an escalation to `~incidents` carrying the alert source, indicator,
    severity, and a `permalink()` back to the original message.
 
+The helpers come from three modules, and you have to import them yourself:
+
+```ts
+import {parseAlertFromProps} from '../lib/alert.js'
+import {createPost, getPost, permalink} from '../lib/mattermost.js'
+import {isValidToken} from '../lib/verify.js'
+```
+
+The `.js` extension is correct even in a `.ts` file: that is how ES modules resolve on
+Node. Note also that the **Editor** tab cannot autocomplete these, and its red underlines
+do not reflect the real build, so `npm run typecheck` in `/home/learner/handler` is the
+authority on whether your code compiles.
+
 ## 3. Test it
+
+Back in the **Terminal** tab:
 
 ```bash
 fire-alert.sh --severity CRITICAL

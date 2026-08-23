@@ -22,9 +22,10 @@ tabs:
   port: 8065
 - id: fc3jvsuvpxn9
   title: Editor
-  type: code
+  type: service
   hostname: workbench
-  path: /home/learner/handler
+  port: 8080
+  path: /?folder=/home/learner/handler
 - id: qlc3yjywsjyx
   title: Lab Inspector
   type: service
@@ -64,9 +65,13 @@ visible to the user.
 
 ## 2. Open a dialog on click
 
-Edit `src/routes/post-action.ts`. Build the dialog and call `openDialog()` with
-`payload.trigger_id`, pointing the callback at
+Edit `src/routes/post-action.ts`. Build the dialog and call `openDialog()` from
+`src/lib/mattermost.ts` with `payload.trigger_id`, pointing the callback at
 `http://workbench:4000/dialogs/escalate/submit`.
+
+```ts
+import {openDialog} from '../lib/mattermost.js'
+```
 
 The dialog needs exactly four elements:
 
@@ -92,6 +97,8 @@ Edit `src/routes/dialog-submit.ts`:
    the submitting analyst, a timestamp, and a permalink to the original alert.
 
 ## 4. Test it
+
+From the **Terminal** tab:
 
 ```bash
 fire-alert.sh --severity CRITICAL

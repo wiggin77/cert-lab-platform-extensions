@@ -307,6 +307,14 @@ Environment=HOME=/tmp
 ExecStart=${LAB_ROOT}/labsvc/node_modules/.bin/tsx src/server.ts
 Restart=always
 RestartSec=2
+# Bound the stop phase. systemctl restart waits for the unit to stop before starting
+# it, and with no timeout here the systemd default of 90s applies, so a process that
+# is slow to die would stall the learner's terminal for a minute and a half per
+# restart. SIGKILL after 10s instead. KillMode=mixed sends SIGTERM to the main
+# process and SIGKILL to anything left in the cgroup, which matters because tsx runs
+# the service as a child.
+TimeoutStopSec=10
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target
@@ -347,6 +355,14 @@ Environment=MM_URL=http://workbench:4000/mm
 ExecStart=${LEARNER_HOME}/handler/node_modules/.bin/tsx watch src/index.ts
 Restart=always
 RestartSec=2
+# Bound the stop phase. systemctl restart waits for the unit to stop before starting
+# it, and with no timeout here the systemd default of 90s applies, so a process that
+# is slow to die would stall the learner's terminal for a minute and a half per
+# restart. SIGKILL after 10s instead. KillMode=mixed sends SIGTERM to the main
+# process and SIGKILL to anything left in the cgroup, which matters because tsx runs
+# the service as a child.
+TimeoutStopSec=10
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target

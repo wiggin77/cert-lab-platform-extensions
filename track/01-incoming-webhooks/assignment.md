@@ -22,9 +22,10 @@ tabs:
   port: 8065
 - id: 6xlnq463x5pz
   title: Editor
-  type: code
+  type: service
   hostname: workbench
-  path: /home/learner/handler
+  port: 8080
+  path: /?folder=/home/learner/handler
 - id: dpqeqsufpv2n
   title: Lab Inspector
   type: service
@@ -90,13 +91,33 @@ Return a message **attachment** carrying:
 - **Fallback text**, which is what appears in a push notification
 
 Helpers are available in `src/lib/attachments.ts` if you want them. Writing the object
-by hand is equally fine.
+by hand is equally fine. The file has the import commented out above the sample: uncomment
+both together, or the helper names will be undefined.
+
+```ts
+import {attachment, code, field} from '../lib/attachments.js'
+```
+
+The `.js` extension is correct even in a `.ts` file, which is how ES modules resolve on
+Node.
+
+To check your work compiles, use the **Terminal** tab:
+
+```bash
+cd /home/learner/handler && npm run typecheck
+```
+
+That, not the editor, is the authority. Silence means it compiled.
 
 ## 4. Watch it arrive
+
+Back in the **Terminal** tab:
 
 ```bash
 fire-alert.sh --severity CRITICAL
 ```
+
+`tsx` reloads your handler on save, so there is nothing to restart first.
 
 Then look at **~alerts**. If nothing appears, open the **Lab Inspector** tab: it shows
 whether the feed reached your webhook and what Mattermost said back.

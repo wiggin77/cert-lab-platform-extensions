@@ -50,4 +50,11 @@ lab_env_set MM_FEED_INCOMING_WEBHOOK_URL "$URL"
 log "restarting the lab service so the feed picks up the URL"
 restart_labsvc
 
-log "done. Fire an alert with: fire-alert.sh --severity CRITICAL"
+# Deliberately not phrased as an instruction. It used to read "done. Fire an alert with:
+# ...", which looked like a required next step and left the learner unsure whether to run
+# it now or after formatting the payload. Either is fine, so say so.
+log "done. The feed will post through your webhook from now on."
+log ""
+log "Nothing else is needed here. Next is formatting the payload."
+log "Firing an alert now is optional, and shows what an unformatted alert looks like:"
+log "  fire-alert.sh --severity CRITICAL"

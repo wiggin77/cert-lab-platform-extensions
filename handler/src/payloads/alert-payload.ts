@@ -21,12 +21,17 @@
  *   then watch #alerts, and check the Lab Inspector if nothing arrives.
  */
 
+// Uncomment this together with the sample below. The helpers are values, not types, so
+// they need a plain import rather than `import type`, and the extension is `.js` even
+// though the file is `.ts`, which is how ES modules resolve on Node.
+// import {attachment, code, field} from '../lib/attachments.js'
 import type {Alert, IncomingWebhookRequest} from '../lib/types.js'
 
 export function buildAlertPayload(alert: Alert): IncomingWebhookRequest {
     // TODO Module 2: replace this with a formatted attachment.
     //
-    // Something along these lines, once you fill in the gaps:
+    // Something along these lines, once you fill in the gaps. Uncomment the import above
+    // at the same time, or `attachment` and `field` will be undefined names.
     //
     //   return {
     //       text: '',
@@ -37,7 +42,11 @@ export function buildAlertPayload(alert: Alert): IncomingWebhookRequest {
     //               severity: alert.severity,
     //               title: alert.title,
     //               text: alert.detail,
-    //               fields: [ ... ],
+    //               fields: [
+    //                   field('Severity', alert.severity),
+    //                   // ... Source, Indicator and Timestamp go here.
+    //                   // code() renders a value as inline code, which suits an indicator.
+    //               ],
     //               footer: 'Simulated feed',
     //           }),
     //       ],

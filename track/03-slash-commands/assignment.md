@@ -21,9 +21,10 @@ tabs:
   port: 8065
 - id: ticdwyq1swj7
   title: Editor
-  type: code
+  type: service
   hostname: workbench
-  path: /home/learner/handler
+  port: 8080
+  path: /?folder=/home/learner/handler
 - id: otqoumdb0uzc
   title: Lab Inspector
   type: service
@@ -51,7 +52,7 @@ enhanced_loading: null
 | Request URL | `http://workbench:4000/commands/threat` |
 | Request Method | `POST` |
 
-Copy the **token** and register it:
+Copy the **token**, switch to the **Terminal** tab, and register it:
 
 ```bash
 sudo lab-set-token command '<paste the token here>'
@@ -71,6 +72,9 @@ Include fields for malware family, confidence score, last seen, and associated
 campaigns.
 
 ## 3. Test it
+
+Run the slash command in the **Mattermost** tab. To see what the intel API knows about,
+use the **Terminal** tab:
 
 In `~alerts`:
 

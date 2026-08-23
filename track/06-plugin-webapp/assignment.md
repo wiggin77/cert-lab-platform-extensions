@@ -21,9 +21,10 @@ tabs:
   port: 8065
 - id: dhpjn9wepubk
   title: Editor
-  type: code
+  type: service
   hostname: workbench
-  path: /home/learner/plugin/webapp
+  port: 8080
+  path: /?folder=/home/learner/plugin/webapp
 - id: 9p3epr5ihqm9
   title: Lab Inspector
   type: service
@@ -78,6 +79,8 @@ these are not instant.
 `GET /api/v1/alerts/count`, and update it when an alert is acknowledged in the pane.
 
 ## 5. Build and deploy
+
+In the **Terminal** tab:
 
 ```bash
 cd /home/learner/plugin

@@ -110,7 +110,10 @@ restart_lab_service() {
         sleep 2
     done
 
-    for _ in $(seq 1 30); do
+    # 60 rather than 30. A learner reported this taking 30 to 40 seconds, against a former
+    # budget of 30, so a correct restart was within a few seconds of being reported as a
+    # failure. Whatever makes it slow, failing spuriously is worse than waiting.
+    for _ in $(seq 1 60); do
         after=$(systemctl show -p MainPID --value "$unit" 2>/dev/null || echo 0)
         if [ "$after" != "0" ] && [ "$after" != "$before" ] &&
             curl -sf -m 2 "$health" >/dev/null 2>&1; then
