@@ -23,8 +23,8 @@ tabs:
   title: Editor
   type: service
   hostname: workbench
-  port: 8080
   path: /?folder=/home/learner/handler
+  port: 8080
 - id: otqoumdb0uzc
   title: Lab Inspector
   type: service

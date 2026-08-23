@@ -23,8 +23,8 @@ tabs:
   title: Editor
   type: service
   hostname: workbench
-  port: 8080
   path: /?folder=/home/learner/plugin/webapp
+  port: 8080
 - id: 9p3epr5ihqm9
   title: Lab Inspector
   type: service

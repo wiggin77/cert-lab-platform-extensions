@@ -98,14 +98,19 @@ if ! mm_running; then
         # 30s is not a guarantee, but it separates "started and stayed up" from "started
         # and immediately died again", and the workbench does not begin waiting instantly.
         say "relaunch answered a ping, confirming it stays up"
+        # 90s rather than 30s, to time the death rather than just detect it. A run held for
+        # 30s here and was unreachable from the workbench 74s later. If the server holds a
+        # full 90s and still dies before the workbench sees it, the death is tied to this
+        # script exiting rather than to anything the server did, which is the difference
+        # between a crash to debug and a reaped process group.
         stable=yes
-        for _ in $(seq 1 10); do
+        for _ in $(seq 1 30); do
             sleep 3
             ping_ok || { stable=no; break; }
         done
 
         if [ "$stable" = yes ]; then
-            say "relaunch succeeded and held for 30s: $(curl -s -m 5 http://localhost:8065/api/v4/system/ping 2>/dev/null)"
+            say "relaunch succeeded and held for 90s: $(curl -s -m 5 http://localhost:8065/api/v4/system/ping 2>/dev/null)"
             exit 0
         fi
 

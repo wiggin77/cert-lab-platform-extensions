@@ -26,8 +26,8 @@ tabs:
   title: Editor
   type: service
   hostname: workbench
-  port: 8080
   path: /?folder=/home/learner/plugin
+  port: 8080
 - id: fizaii2l5pkg
   title: Lab Inspector
   type: service

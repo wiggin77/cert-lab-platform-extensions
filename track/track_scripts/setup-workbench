@@ -155,6 +155,35 @@ if ! wait_for http://mattermost:8065/api/v4/system/ping "Mattermost" 150; then
     echo "[setup] Mattermost runs on its own host, so its logs are not here." >&2
     echo "[setup] Look for the setup-mattermost output in this track log: it reports" >&2
     echo "[setup] whether Postgres was reachable and whether a relaunch was attempted." >&2
+
+    # Which layer failed is the whole question, and it is not answerable from the other
+    # host's log: setup-mattermost has already exited by the time this runs, and it reported
+    # success. A run where it says "relaunch succeeded and held for 30s" and this says
+    # "never came up" means the server died in between, or was never reachable from here.
+    # Those need opposite fixes, so probe each layer separately and say which one broke.
+    #
+    #   DNS fails                -> sandbox networking, not Mattermost
+    #   DNS ok, TCP refused      -> nothing is listening, so the process is gone
+    #   TCP ok, HTTP no answer   -> process alive but not serving, look at its own log
+    echo "[setup] --- probing each layer from this host ---" >&2
+    echo "[setup] DNS for 'mattermost': $(getent hosts mattermost 2>&1 || echo 'DOES NOT RESOLVE')" >&2
+
+    if timeout 5 bash -c 'echo > /dev/tcp/mattermost/8065' 2>/dev/null; then
+        echo "[setup] TCP to mattermost:8065: OPEN, so a process is listening" >&2
+        echo "[setup] So the port answers but the API does not. Mattermost is up and not" >&2
+        echo "[setup] serving, which points at its own startup, not at the network." >&2
+    else
+        echo "[setup] TCP to mattermost:8065: REFUSED or unreachable" >&2
+        echo "[setup] So nothing is listening. Either the server died after" >&2
+        echo "[setup] setup-mattermost confirmed it, or the respawn loop there was reaped" >&2
+        echo "[setup] when that script exited." >&2
+    fi
+
+    # curl's own exit code separates a connection failure (7) from a timeout (28), which is
+    # the same distinction one level up and costs nothing to record.
+    curl -sf -m 5 http://mattermost:8065/api/v4/system/ping >/dev/null 2>&1
+    echo "[setup] curl exit code: $? (7 = could not connect, 28 = timed out, 0 = fine)" >&2
+
     exit 1
 fi
 
