@@ -1,5 +1,5 @@
 /**
- * MODULE 6 SOLUTION, challenge 2  ·  right hand sidebar pane
+ * MODULE 6 SOLUTION  ·  right hand sidebar pane
  *
  * Registered with registry.registerRightHandSidebarComponent(component, title). Unlike a
  * post card, this persists as the user moves around, so it is the right place for detail

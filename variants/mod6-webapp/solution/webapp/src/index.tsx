@@ -1,5 +1,5 @@
 /**
- * MODULE 6 SOLUTION, challenge 2  ·  plugin entry point
+ * MODULE 6 SOLUTION  ·  plugin entry point
  *
  * Mattermost calls initialize() once, after the webapp has loaded. The registry is how a
  * plugin adds to the interface: each register call returns an id, and each one is an

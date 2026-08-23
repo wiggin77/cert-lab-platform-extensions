@@ -1,6 +1,6 @@
 package main
 
-// Tests for the server half of Module 6.
+// Tests for the server half of the plugin. Module 5.
 //
 // These are the spec. Run them with `make test` and work until they pass, which is a much
 // faster loop than `make deploy` and firing an alert: a full deploy plus a stimulus is

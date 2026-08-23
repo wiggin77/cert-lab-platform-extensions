@@ -1,5 +1,5 @@
 /**
- * MODULE 5  ·  Dialog Submission
+ * MODULE 4  ·  Dialog Submission
  *
  * The analyst filled in the escalation dialog and pressed submit. Mattermost POSTs the
  * completed form here. Your job is to validate it and, if it is good, post a structured
@@ -42,16 +42,16 @@ export async function handleDialogSubmit(req: FastifyRequest, reply: FastifyRepl
         return reply.send({} satisfies SubmitDialogResponse)
     }
 
-    // TODO Module 5, step 1: validate. Severity and Affected Systems must not be empty.
+    // TODO Module 4, step 1: validate. Severity and Affected Systems must not be empty.
     // Return errors keyed by the element `name` you used when building the dialog, not by
     // its display_name:
     //
     //   return reply.send({errors: {severity: 'Choose a severity.'}})
 
-    // TODO Module 5, step 2: recover the original alert's post id. You stashed it in the
+    // TODO Module 4, step 2: recover the original alert's post id. You stashed it in the
     // dialog's `state` when you opened it, and it comes back on payload.state unchanged.
 
-    // TODO Module 5, step 3: post the escalation to config.channels.incidents. Include
+    // TODO Module 4, step 3: post the escalation to config.channels.incidents. Include
     // every submitted field, payload.user_id or the analyst's username, a timestamp, and
     // permalink(originalPostId).
 

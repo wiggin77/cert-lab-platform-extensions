@@ -6,7 +6,7 @@
  * renderer.
  *
  * This is not attachment formatting with extra steps. There is no colour bar or field
- * grid unless you draw one: you own the whole render, including the layout Module 2's
+ * grid unless you draw one: you own the whole render, including the layout Module 1's
  * attachments gave you for free.
  *
  * The alert data is on the post, in post.props, put there by the server side hook. Read

@@ -1,5 +1,5 @@
 /**
- * MODULE 5  ·  Post Actions
+ * MODULE 4  ·  Post Actions
  *
  * An analyst clicks the Escalate button on an alert. Mattermost POSTs here. Your job is to
  * open a dialog so they can add their assessment.
@@ -11,7 +11,7 @@
  *
  * WHERE THE BUTTON COMES FROM
  *   Buttons live in an attachment's `actions` array. Add one to the alert attachment you
- *   built in Module 2 using button() from ../lib/attachments.js, pointing at
+ *   built in Module 1 using button() from ../lib/attachments.js, pointing at
  *   `${config.publicBaseUrl}/actions/escalate`. Put the alert's post id and indicator in
  *   the integration context so they come back to you here.
  *
@@ -37,11 +37,11 @@ export async function handlePostAction(req: FastifyRequest, reply: FastifyReply)
 
     req.log.info({user: payload.user_id, post: payload.post_id, context: payload.context}, 'post action clicked')
 
-    // TODO Module 5, step 1: build the dialog. callback_id identifies it on submission,
+    // TODO Module 4, step 1: build the dialog. callback_id identifies it on submission,
     // and state is an opaque string that round trips unchanged, which makes it the right
     // place to stash the originating post id.
 
-    // TODO Module 5, step 2: call openDialog() with payload.trigger_id and a url of
+    // TODO Module 4, step 2: call openDialog() with payload.trigger_id and a url of
     // `${config.publicBaseUrl}/dialogs/escalate/submit`.
     //
     // Note there is no token on this surface. Mattermost authenticates the dialog through

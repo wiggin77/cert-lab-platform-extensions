@@ -1,7 +1,7 @@
 {
     "id": "com.mattermost.cert-alerts",
     "name": "SOC Alerts",
-    "description": "Captures threat feed alerts, stores them in the KV Store, and renders them in the webapp. Certification lab, Module 6.",
+    "description": "Captures threat feed alerts, stores them in the KV Store, and renders them in the webapp. Certification lab, modules 5 and 6.",
     "homepage_url": "https://github.com/wiggin77/cert-lab-platform-extensions",
     "support_url": "https://github.com/wiggin77/cert-lab-platform-extensions/issues",
     "version": "0.1.0",

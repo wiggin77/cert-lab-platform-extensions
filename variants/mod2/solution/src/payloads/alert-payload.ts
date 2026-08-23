@@ -1,7 +1,7 @@
 /**
- * MODULE 2 SOLUTION  ·  Incoming Webhooks
+ * MODULE 1 SOLUTION  ·  Incoming Webhooks
  *
- * Applied by the Instruqt solve script, and run against the Module 2 checks in CI.
+ * Applied by the Instruqt solve script, and run against the Module 1 checks in CI.
  */
 
 import {attachment, code, field} from '../lib/attachments.js'

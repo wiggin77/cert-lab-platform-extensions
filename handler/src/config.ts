@@ -45,7 +45,7 @@ export const config = {
     outgoingWebhookToken: env('MM_OUTGOING_WEBHOOK_TOKEN'),
     commandToken: env('MM_COMMAND_TOKEN'),
 
-    /** Mock threat intel API, Module 4. */
+    /** Mock threat intel API, Module 3. */
     intelApiUrl: env('INTEL_API_URL', 'http://workbench:4000/mock/intel/v1'),
 
     /** Where your integration callback URLs live, used when building dialog URLs. */

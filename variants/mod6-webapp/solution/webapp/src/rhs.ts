@@ -1,5 +1,5 @@
 /**
- * MODULE 6 SOLUTION, challenge 2  ·  opening the sidebar from anywhere
+ * MODULE 6 SOLUTION  ·  opening the sidebar from anywhere
  *
  * registerRightHandSidebarComponent hands back the actions that open and close the pane,
  * but only at registration time, inside initialize(). The post card is rendered later and

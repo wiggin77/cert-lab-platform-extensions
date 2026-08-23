@@ -4,7 +4,7 @@ import (
 	"net/http"
 )
 
-// AI skills. Module 6, challenge 2.
+// AI skills. Module 6.
 //
 // The route is already registered for you in api.go. This is the endpoint the two buttons
 // in the sidebar pane call.

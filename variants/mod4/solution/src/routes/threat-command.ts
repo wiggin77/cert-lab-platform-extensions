@@ -1,7 +1,7 @@
 /**
- * MODULE 4 SOLUTION  ·  Slash Commands
+ * MODULE 3 SOLUTION  ·  Slash Commands
  *
- * Applied by the Instruqt solve script, and run against the Module 4 checks in CI.
+ * Applied by the Instruqt solve script, and run against the Module 3 checks in CI.
  *
  * The shape of this file is the lesson. Mattermost gives a slash command a few seconds to
  * reply, and a threat intel lookup can outlast that, so the handler acknowledges first and

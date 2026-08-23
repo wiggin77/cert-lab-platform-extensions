@@ -52,7 +52,7 @@ export function parseAlertFromProps(props: Record<string, unknown> | undefined):
  * Last resort extraction from raw message text.
  *
  * Useful when a post has no attachment, for example while you are still working on
- * Module 2's payload.
+ * Module 1's payload.
  */
 export function extractIndicator(text: string): string | null {
     const patterns = [

@@ -10,7 +10,7 @@ import (
 	"github.com/mattermost/mattermost/server/public/model"
 )
 
-// AI skills. Module 6, challenge 2.
+// AI skills. Module 6.
 //
 // The skills the lab's LLM knows about. The webapp sends one of these names.
 const (

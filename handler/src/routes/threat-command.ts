@@ -1,5 +1,5 @@
 /**
- * MODULE 4  ·  Slash Commands
+ * MODULE 3  ·  Slash Commands
  *
  * An analyst runs `/threat <indicator>` in #alerts. You look the indicator up against the
  * mock threat intel API and return enrichment data.
@@ -47,13 +47,13 @@ export async function handleThreatCommand(req: FastifyRequest, reply: FastifyRep
 
     req.log.info({user: payload.user_name, text: payload.text}, 'slash command received')
 
-    // TODO Module 4, step 1: reject the request unless the token matches
+    // TODO Module 3, step 1: reject the request unless the token matches
     // config.commandToken.
 
-    // TODO Module 4, step 2: read the indicator out of payload.text and handle the case
+    // TODO Module 3, step 2: read the indicator out of payload.text and handle the case
     // where the user typed `/threat` with nothing after it.
 
-    // TODO Module 4, step 3: kick off the lookup WITHOUT awaiting it here, so you can
+    // TODO Module 3, step 3: kick off the lookup WITHOUT awaiting it here, so you can
     // return the acknowledgment below straight away.
     //
     //   void enrich(indicator, payload).catch((err) => req.log.error({err}, 'enrichment failed'))
@@ -62,7 +62,7 @@ export async function handleThreatCommand(req: FastifyRequest, reply: FastifyRep
     // `${config.intelApiUrl}/indicators/${encodeURIComponent(indicator)}`, build an
     // attachment from the result, and deliver it.
 
-    // TODO Module 4, step 4: return an ephemeral acknowledgment naming the indicator, so
+    // TODO Module 3, step 4: return an ephemeral acknowledgment naming the indicator, so
     // the analyst knows the lookup is running.
     const response: CommandResponse = {
         response_type: 'ephemeral',
@@ -72,7 +72,7 @@ export async function handleThreatCommand(req: FastifyRequest, reply: FastifyRep
 }
 
 /**
- * TODO Module 4: implement the lookup and delivery.
+ * TODO Module 3: implement the lookup and delivery.
  *
  * Two ways to deliver the result, both acceptable:
  *

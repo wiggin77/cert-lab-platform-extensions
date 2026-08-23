@@ -1,7 +1,7 @@
 /**
- * MODULE 5 SOLUTION  ·  Post Actions
+ * MODULE 4 SOLUTION  ·  Post Actions
  *
- * Applied by the Instruqt solve script, and run against the Module 5 checks in CI.
+ * Applied by the Instruqt solve script, and run against the Module 4 checks in CI.
  *
  * Note the ordering. `trigger_id` expires within seconds, so openDialog() is the last
  * thing this handler does. Anything slow placed before it is how a dialog silently fails

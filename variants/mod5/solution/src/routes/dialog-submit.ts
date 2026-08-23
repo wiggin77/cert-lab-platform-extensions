@@ -1,7 +1,7 @@
 /**
- * MODULE 5 SOLUTION  ·  Dialog Submission
+ * MODULE 4 SOLUTION  ·  Dialog Submission
  *
- * Applied by the Instruqt solve script, and run against the Module 5 checks in CI.
+ * Applied by the Instruqt solve script, and run against the Module 4 checks in CI.
  *
  * Validation happens here rather than after posting, because the protocol supports it:
  * returning `errors` keyed by element name keeps the dialog open with the message under

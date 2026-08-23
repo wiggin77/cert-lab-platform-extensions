@@ -26,13 +26,13 @@ app.addContentTypeParser('application/x-www-form-urlencoded', {parseAs: 'string'
 
 app.get('/healthz', async () => ({ok: true}))
 
-// Module 3
+// Module 2
 app.post('/webhooks/outgoing', handleOutgoingWebhook)
 
-// Module 4
+// Module 3
 app.post('/commands/threat', handleThreatCommand)
 
-// Module 5
+// Module 4
 app.post('/actions/escalate', handlePostAction)
 app.post('/dialogs/escalate/submit', handleDialogSubmit)
 

@@ -1,5 +1,5 @@
 /**
- * MODULE 6 SOLUTION, challenge 2  ·  plugin redux state
+ * MODULE 6 SOLUTION  ·  plugin redux state
  *
  * The post card and the sidebar pane are rendered in different parts of the app and never
  * see each other, so "which alert is selected" cannot live in either one's props. A plugin

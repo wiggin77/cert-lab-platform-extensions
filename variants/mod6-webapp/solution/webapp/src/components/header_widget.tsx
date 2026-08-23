@@ -1,5 +1,5 @@
 /**
- * MODULE 6 SOLUTION, challenge 2  ·  channel header widget
+ * MODULE 6 SOLUTION  ·  channel header widget
  *
  * Registered with registry.registerChannelHeaderButtonAction(icon, action, dropdownText,
  * tooltipText). The icon argument is a React node, which is what lets this show a live

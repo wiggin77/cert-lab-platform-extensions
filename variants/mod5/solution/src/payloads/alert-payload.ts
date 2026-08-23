@@ -1,11 +1,11 @@
 /**
- * MODULE 5 SOLUTION  ·  the alert payload, now carrying an Escalate button
+ * MODULE 4 SOLUTION  ·  the alert payload, now carrying an Escalate button
  *
- * Applied by the Instruqt solve script, and run against the Module 5 checks in CI.
+ * Applied by the Instruqt solve script, and run against the Module 4 checks in CI.
  *
- * This is the Module 2 payload plus an `actions` array. Interactive elements are declared
+ * This is the Module 1 payload plus an `actions` array. Interactive elements are declared
  * in the message itself, so adding a button means changing whatever built the message,
- * which is why Module 5 comes back to this file.
+ * which is why Module 4 comes back to this file.
  */
 
 import {config} from '../config.js'

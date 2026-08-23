@@ -1,5 +1,5 @@
 /**
- * MODULE 2  ·  Incoming Webhooks
+ * MODULE 1  ·  Incoming Webhooks
  *
  * The threat feed calls this function for every alert, then POSTs whatever you return to
  * the incoming webhook you created in Mattermost.
@@ -28,7 +28,7 @@
 import type {Alert, IncomingWebhookRequest} from '../lib/types.js'
 
 export function buildAlertPayload(alert: Alert): IncomingWebhookRequest {
-    // TODO Module 2: replace this with a formatted attachment.
+    // TODO Module 1: replace this with a formatted attachment.
     //
     // Something along these lines, once you fill in the gaps. Uncomment the import above
     // at the same time, or `attachment` and `field` will be undefined names.

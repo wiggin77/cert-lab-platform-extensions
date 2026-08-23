@@ -1,7 +1,7 @@
 /**
- * MODULE 3 SOLUTION  ·  Outgoing Webhooks
+ * MODULE 2 SOLUTION  ·  Outgoing Webhooks
  *
- * Applied by the Instruqt solve script, and run against the Module 3 checks in CI.
+ * Applied by the Instruqt solve script, and run against the Module 2 checks in CI.
  */
 
 import type {FastifyReply, FastifyRequest} from 'fastify'

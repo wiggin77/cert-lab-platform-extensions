@@ -1,11 +1,11 @@
 /**
- * MODULE 6 SOLUTION, challenge 2  ·  custom post card
+ * MODULE 6 SOLUTION  ·  custom post card
  *
  * Registered with registry.registerPostTypeComponent(type, component). Mattermost renders
  * every post carrying that type with this component instead of its own post renderer.
  *
  * This is not attachment formatting with extra steps. Mattermost skips its own message
- * body entirely for a registered type, including the attachment rendering Module 2 got for
+ * body entirely for a registered type, including the attachment rendering Module 1 got for
  * free, so the colour bar and the field grid below exist only because they are drawn here.
  *
  * The alert data comes off post.props, put there by the feed. Reading it from the post
