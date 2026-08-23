@@ -280,6 +280,18 @@ write_unit mm-labsvc <<EOF
 [Unit]
 Description=Certification lab services
 After=network-online.target
+# StartLimitIntervalSec belongs in [Unit], NOT [Service]. Modern systemd ignores it
+# under [Service] with an "Unknown key name" warning, so putting it there looks
+# like a fix and changes nothing.
+#
+# Never give up restarting. The default start limit is 5 attempts in 10s, and with
+# RestartSec=2 that is only a few crash-loops from systemd refusing to start the
+# unit at all, leaving it dead with "start request repeated too quickly". Restarts
+# cluster in this lab: lab-module.sh bounces labsvc at every challenge boundary, and
+# lab-set-webhook and lab-set-token bounce it again when the learner registers
+# something. One transient crash on top of that left labsvc permanently dead and a
+# challenge that could not be checked at all.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -304,6 +316,18 @@ write_unit mm-handler <<EOF
 [Unit]
 Description=Learner integration handler
 After=network-online.target
+# StartLimitIntervalSec belongs in [Unit], NOT [Service]. Modern systemd ignores it
+# under [Service] with an "Unknown key name" warning, so putting it there looks
+# like a fix and changes nothing.
+#
+# Never give up restarting. The default start limit is 5 attempts in 10s, and with
+# RestartSec=2 that is only a few crash-loops from systemd refusing to start the
+# unit at all, leaving it dead with "start request repeated too quickly". Restarts
+# cluster in this lab: lab-module.sh bounces labsvc at every challenge boundary, and
+# lab-set-webhook and lab-set-token bounce it again when the learner registers
+# something. One transient crash on top of that left labsvc permanently dead and a
+# challenge that could not be checked at all.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

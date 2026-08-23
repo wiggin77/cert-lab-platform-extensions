@@ -26,17 +26,36 @@ else
     echo "LAB_MODULE=${MODULE}" >> "$LAB_ENV"
 fi
 
-systemctl restart mm-labsvc
+# Retried, and verified by the main PID changing rather than by a health check alone.
+#
+# `systemctl restart` exits non-zero when systemd supersedes a pending job for the same
+# unit, and under `set -e` that killed this script outright. Worse, if every restart is
+# superseded the old process keeps serving with the previous LAB_MODULE, so /healthz
+# answers and nothing looks wrong while the feed is on the wrong transport.
+BEFORE_PID=$(systemctl show -p MainPID --value mm-labsvc 2>/dev/null || echo 0)
 
+for attempt in 1 2 3; do
+    if systemctl restart mm-labsvc 2>/dev/null; then
+        break
+    fi
+    echo "lab-module: restart of mm-labsvc was superseded (attempt ${attempt}), retrying" >&2
+    sleep 2
+done
+
+restarted=false
 for _ in $(seq 1 30); do
-    if curl -sf -m 2 "${LABSVC}/healthz" >/dev/null 2>&1; then
+    NOW_PID=$(systemctl show -p MainPID --value mm-labsvc 2>/dev/null || echo 0)
+    if [ "$NOW_PID" != "0" ] && [ "$NOW_PID" != "$BEFORE_PID" ] &&
+        curl -sf -m 2 "${LABSVC}/healthz" >/dev/null 2>&1; then
+        restarted=true
         break
     fi
     sleep 1
 done
 
-if ! curl -sf -m 2 "${LABSVC}/healthz" >/dev/null 2>&1; then
-    echo "lab-module: labsvc did not come back up after restart" >&2
+if [ "$restarted" != true ]; then
+    echo "lab-module: mm-labsvc did not restart onto module ${MODULE}" >&2
+    echo "lab-module: check journalctl -u mm-labsvc -n 50" >&2
     exit 1
 fi
 

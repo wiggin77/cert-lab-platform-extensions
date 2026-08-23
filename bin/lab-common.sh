@@ -79,3 +79,48 @@ mm_ok_if_exists() {
 }
 
 json_get() { python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$1',''))" 2>/dev/null; }
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+
+# Restart labsvc so it re-reads /etc/lab.env, and prove that it did.
+#
+# `systemctl restart` exits non-zero when systemd supersedes a pending job for the same
+# unit, printing "Job for mm-labsvc.service canceled." Every caller here runs under
+# `set -e`, so that aborted the script on the spot: the environment file had already been
+# updated, the service was still running with the old value, and the learner saw a
+# half-finished command with no error and no confirmation.
+#
+# Retrying is not enough on its own either. If all the restarts are superseded the service
+# keeps running happily with stale configuration, so a health check alone reports success.
+# Waiting for the main PID to CHANGE is what actually proves a new process picked up the
+# new environment.
+# restart_lab_service <unit> <health-url>
+restart_lab_service() {
+    local unit="$1" health="$2"
+    local before after attempt
+    before=$(systemctl show -p MainPID --value "$unit" 2>/dev/null || echo 0)
+
+    for attempt in 1 2 3; do
+        if systemctl restart "$unit" 2>/dev/null; then
+            break
+        fi
+        warn "restart of ${unit} was superseded (attempt ${attempt}), retrying"
+        sleep 2
+    done
+
+    for _ in $(seq 1 30); do
+        after=$(systemctl show -p MainPID --value "$unit" 2>/dev/null || echo 0)
+        if [ "$after" != "0" ] && [ "$after" != "$before" ] &&
+            curl -sf -m 2 "$health" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    die "${unit} did not restart. Check: journalctl -u ${unit} -n 50"
+}
+
+restart_labsvc() { restart_lab_service mm-labsvc "${LABSVC}/healthz"; }
+restart_handler() { restart_lab_service mm-handler "http://localhost:3000/healthz"; }

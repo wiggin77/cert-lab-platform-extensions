@@ -60,14 +60,23 @@ used for every challenge in the track.
 
 ## 2. Create the incoming webhook
 
-From the main menu, go to **Integrations > Incoming Webhooks > Add Incoming Webhook**. Set
-the channel to **~alerts** and save.
+From the main menu, go to **Integrations > Incoming Webhooks > Add Incoming Webhook**.
 
-Copy the resulting URL, then register it with the feed:
+**Channel** is the only field that matters: set it to **Alerts**. Title, Description,
+Username, Profile Picture and *Lock to this channel* are all optional, and Mattermost will
+save without them. Give it a Title if you like, then **Save**.
+
+Mattermost shows you the webhook URL once. Copy it, then open the **Terminal** tab and
+register it with the feed:
 
 ```bash
 sudo lab-set-webhook '<paste the URL here>'
 ```
+
+Keep the quotes. The URL in your browser is a public address and the feed calls it from
+inside the sandbox, so `lab-set-webhook` rewrites it to the internal one and tells you it
+did. It then posts a test message, so you should see something land in **~alerts**
+immediately.
 
 ## 3. Format the payload
 
