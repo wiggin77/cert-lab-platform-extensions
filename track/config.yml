@@ -35,6 +35,24 @@ containers:
 - name: mattermost
   image: mattermost/mattermost-team-edition:10.5
   memory: 2048
+
+  # Constraint 3, same shape as the two above: `command:` is ignored here, so the
+  # container's startup cannot be wrapped or delayed. Verified, not assumed. A
+  # `command: ["bash","-c","...wait for postgres...; exec mattermost"]` entry passed
+  # `instruqt track validate`, pushed, and had no effect: the server still started
+  # immediately and still died with "cannot create store". Assume `entrypoint:` is the
+  # same and do not spend another run on it.
+  #
+  # This matters because Mattermost loses a DNS race on every single boot. The container
+  # starts before the sandbox has a record for `postgres`, and Mattermost gives the
+  # database about 8 seconds before exiting fatally: DBPingAttempts is 5
+  # (channels/store/sqlstore/store.go) with a 2s DBConnRetrySleep
+  # (public/utils/sql/sql_utils.go), both compile-time constants, and an NXDOMAIN returns
+  # instantly rather than consuming the 10s ping timeout. No setting changes any of that.
+  #
+  # So the race cannot be eliminated from here, and setup-mattermost relaunching the
+  # server by hand stays load-bearing. Controlling startup would mean baking a custom
+  # image, which is already on the list below for other reasons.
   ports:
   - 8065
   environment:
