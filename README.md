@@ -125,11 +125,12 @@ Outstanding:
   webapp bundle for the three registrations and says so explicitly, rather than implying it
   proved the components render. Layout, opening the sidebar from the post card, and the
   header count updating all need eyes on them once.
-- Setup takes **5m38s** on a clean sandbox, and the learner currently watches all of it
-  on the loading screen. About 3m20s of that is warming the Module 6 plugin build caches,
-  mostly fetching and compiling the Go dependency tree. Hot start would move it before the
-  learner arrives but is not enabled on this track; baking a custom VM image with the
-  toolchains, Go module cache and node_modules would remove it outright.
+- Setup is slow and the learner watches all of it on the loading screen. It is **CPU bound**:
+  compiling the Module 6 plugin's dependency tree and running its webpack build dominate, on
+  two vCPU. The Go *module* cache is cheap to rebuild, so the thing worth baking into a
+  custom VM image is the Go *build* cache, along with the apt packages, Node and code-server.
+  Hot start is ruled out on cost. `setup-workbench` prints a phase breakdown at the end of
+  every run, so measure rather than guess.
 - CI outside Instruqt. `instruqt track test` covers the apply-and-check loop today, but it
   needs a live sandbox, so it is not something a pull request can run.
 

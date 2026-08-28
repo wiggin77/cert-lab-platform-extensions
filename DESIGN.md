@@ -83,9 +83,10 @@ learner-authored code in a container would sit on an overlay filesystem and be l
 pod restarted. The VM also carries the Go and Node toolchains Module 6 needs.
 
 Code reaches the VM by `git clone` at track setup. Instruqt has no mechanism for uploading
-a tree: assets become HTTPS URLs for assignment markdown, not host files. The alternative
-is baking a custom VM image, which needs a GCP project and Packer, and is worth doing later
-purely for startup time.
+a tree: assets become HTTPS URLs for assignment markdown, not host files. The alternative is
+baking a custom VM image, which is worth doing for startup time. Note that an **Instruqt
+Host image** is built in the web UI from a preset base and needs neither a GCP project nor
+Packer; only the `PROJECT_ID/IMAGE_NAME` route does.
 
 ### 3.0 Platform behaviour worth knowing before changing this
 

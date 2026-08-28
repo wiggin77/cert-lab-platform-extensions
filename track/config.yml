@@ -62,16 +62,19 @@ containers:
   # schema also omits `ports:` and `environment:`, which this stanza uses and which plainly
   # work, so absence from the reference proves nothing.
   #
-  # This matters because Mattermost loses a DNS race on every single boot. The container
+  # This matters because Mattermost CAN lose a DNS race with its database. The container
   # starts before the sandbox has a record for `a-postgres`, and Mattermost gives the
   # database about 8 seconds before exiting fatally: DBPingAttempts is 5
   # (channels/store/sqlstore/store.go) with a 2s DBConnRetrySleep
   # (public/utils/sql/sql_utils.go), both compile-time constants, and an NXDOMAIN returns
   # instantly rather than consuming the 10s ping timeout. No setting changes any of that.
   #
-  # So the relaunch in setup-mattermost stays load bearing until something starts this
-  # container after the database. The host ordering above is the cheap candidate; failing
-  # that it is `cmd:`, or baking an image whose entrypoint waits.
+  # An earlier version of this comment said the race was lost on every single boot. That is
+  # not holding: measured runs have Mattermost up before its setup script even starts, and
+  # that script costs about 5 seconds rather than the two and a half minutes the relaunch
+  # path implies. The relaunch stays because losing the race leaves the server down for the
+  # life of the sandbox, but treat it as insurance and not as a cost worth optimising. If it
+  # ever needs a real fix, it is `cmd:` above, or an image whose entrypoint waits.
   ports:
   - 8065
   environment:
@@ -127,11 +130,17 @@ virtualmachines:
   # Docker is no longer needed here now that Mattermost and Postgres are containers, so a
   # stock Ubuntu base is enough. Verified to boot and run lifecycle scripts.
   #
-  # TODO: bake a custom image with the toolchains, Go module cache and node_modules
-  # pre-installed. Track setup installs them at runtime and that is measured at 5m38s,
-  # ~3m20s of it the Go dependency tree for the Module 6 plugin. Hot start would move that
-  # before the learner arrives, but it is not enabled on this track, so today they watch
-  # all of it on the loading screen.
+  # TODO: bake a custom image. `setup-workbench` prints a phase breakdown, and the measured
+  # answer is that this is CPU bound: compiling the Module 6 plugin's dependency tree and
+  # running its webpack build dominate, on two vCPU. The Go MODULE cache is nearly free to
+  # rebuild (a few seconds for 251 MB, so neither network nor disk is the constraint); the
+  # Go BUILD cache is what costs, and it is the thing worth baking, along with the apt
+  # packages, Node, code-server and the webapp node_modules.
+  #
+  # Hot start is ruled out on cost: you are billed for pre-warmed sandboxes nobody claims.
+  #
+  # Instruqt Host images are built in the web UI from a preset base, with a configurable
+  # disk size, and need neither a GCP project nor Packer, so this is cheaper than it looks.
   image: ubuntu-os-cloud/ubuntu-2204-lts
   shell: /bin/bash
   machine_type: n1-standard-2

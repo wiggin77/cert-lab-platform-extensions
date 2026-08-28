@@ -12,9 +12,13 @@
 #
 # It prints its own phase breakdown, so read the summary at the end of a run rather than
 # guessing where the time went. Hot start is ruled out on cost (you are billed for unclaimed
-# pre-warmed sandboxes), so the fix has to make this script genuinely faster: bake a custom
-# VM image with the toolchains and caches already present, and overlap the independent
-# downloads and compiles, which today run strictly one after another.
+# pre-warmed sandboxes), so the fix has to make this script genuinely faster, and the
+# measured answer is to bake a custom VM image with the toolchains and the Go build cache
+# already present.
+#
+# Do not bother parallelising the steps below. That looked promising until the phases were
+# measured: the downloads are seconds each, and the cost is two CPU bound compiles on two
+# vCPU, which cannot overlap usefully.
 #
 set -euo pipefail
 
@@ -380,9 +384,11 @@ chmod 755 "$LEARNER_HOME"
 # the alternative spends it inside a timed challenge instead of on the loading screen, but
 # it is the first thing to attack, and baking a custom VM image removes it outright.
 #
-# The four phases below are timed separately on purpose. Do not re-lump them: which of
-# download, compile, and npm dominates is what decides whether the answer is baked caches,
-# a bigger machine_type, or a bigger boot disk.
+# The four phases below are timed separately on purpose, and the split settled an argument:
+# `go mod download` is a few seconds for 251 MB while compiling the test binary is a minute
+# and a half, so this is CPU bound, not network or disk bound. A bigger boot disk would buy
+# nothing. Baking the Go BUILD cache would remove almost all of it; baking the module cache
+# would save seconds. Do not re-lump these phases, the distinction is the whole finding.
 #
 # It runs as the learner, not root, and that matters: a module cache under /root is not
 # readable by them, so the download would silently happen again on first build. Same for
@@ -391,11 +397,10 @@ chmod 755 "$LEARNER_HOME"
 # Non-fatal. A network hiccup here costs the learner time, but the track still works.
 log "warming the plugin build caches"
 
-# The download and the compile are run as two commands rather than one so the timing can
-# separate them. They are bound by different resources, network and disk versus CPU, and
-# they point at different fixes. Lumping them is how this section's cost came to be
-# attributed to "fetching and compiling the Go dependency tree" without evidence for the
-# split.
+# Two commands rather than one, so the timing separates them. They are bound by different
+# resources and measuring them apart is what showed the download is trivial and the compile
+# is not. Lumping them is how this section's cost came to be attributed to "fetching and
+# compiling the Go dependency tree", which is half wrong.
 phase "go mod download"
 if ! su -l "$LEARNER" -c "cd ~/plugin && go mod download" >/tmp/plugin-warm-go.log 2>&1; then
     log "WARNING: the Go module download failed, Module 6's first build will be slow:"
