@@ -183,6 +183,47 @@ Lifecycle scripts under `track/` deploy with the track, so they are testable wit
 push. Everything the sandbox clones needs GitHub first. Use `LAB_REPO_REF` to point a run
 at a branch.
 
+## The Instruqt CLI is yours to drive
+
+**Division of labour: Claude runs the `instruqt` commands, the user runs the `git` commands.**
+Do not ask the user to read the track playback screen or to paste log output. Fetch it.
+
+```bash
+cd track
+instruqt track validate     # local only, checks config.yml and every assignment
+instruqt track push         # the ONLY command here that changes remote state
+instruqt track logs         # lifecycle script output, see the warning below
+instruqt track test         # run the track with its lifecycle scripts
+instruqt track open         # open it in a browser
+```
+
+`validate` and `push` operate on the current directory, so they need `cd track`. `logs`
+takes a slug and works from anywhere:
+
+```bash
+timeout 60 instruqt track logs platform-extensions --since 20m
+```
+
+**`instruqt track logs` tails forever and never exits.** Always wrap it in `timeout`, or
+run it in the background writing to a file. Without that it hangs until something kills it.
+`--since` takes a Go duration (`20m`) or RFC3339, and defaults to one minute ago, which is
+almost never what you want. Other flags: `--severity` (default INFO), `--participant-id`,
+`--config-version-id`.
+
+**The log is a timing source even with no instrumentation.** Every line is
+`<RFC3339> <participant-id> INFO: <script>: <output>`, and the platform emits
+`Starting script: X` / `Finished running script: X` around each one, so per-host durations
+are subtraction. Terraform provisioning is bracketed the same way.
+
+**A running sandbox keeps the config version it started with.** Pushing mid-run does not
+affect the run in progress, and the symptom is subtle: the log shows the *old* script names
+and hostnames while your local tree has the new ones. Check for a script name you renamed
+before concluding anything about a run's results.
+
+**`instruqt track push` rewrites local files.** It normalises tab key order and the
+`checksum` in `track.yml`, so a push leaves you with an unstaged diff you did not write.
+Commit it, or the next push reproduces it.
+
 ## Solve scripts must do both halves
 
 A `solve-workbench` script has to reproduce the Mattermost-side configuration as well as

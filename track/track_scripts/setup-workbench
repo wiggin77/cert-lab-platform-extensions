@@ -112,19 +112,64 @@ wait_for() {
 log "installing base packages"
 export DEBIAN_FRONTEND=noninteractive
 
-# Retry the install itself rather than probing apt for readiness. A probe on package
-# metadata was misleading: apt reported a healthy update (35 MB fetched, all sources hit)
-# while the probe still said the lists were unusable. What matters is whether the packages
-# install, so ask that question directly and show the real error when they do not.
+# CHECK apt-get update, and keep its output.
+#
+# A failed update does not fail an install directly. It leaves the package lists absent, and
+# the install then reports "Package 'make' has no installation candidate", which reads like a
+# wrong package name rather than a broken update. One run lost 3m13s to exactly that, with
+# the cause silenced by `>/dev/null 2>&1 || true`.
+#
+# This is NOT the readiness probe that was tried and rejected. That probe read package
+# metadata and was misleading: apt reported a healthy update (35 MB fetched, all sources hit)
+# while the probe still called the lists unusable. Asking apt-get update for its own exit
+# status is not a probe, it is the result of the step we actually depend on.
+#
+# The likely cause of an early failure is that a fresh GCE image runs apt-daily and
+# unattended-upgrades on boot and those hold the apt lists lock. That clears on its own, so
+# back off and retry rather than fighting it.
+APT_UPDATED=false
+APT_UPDATE_EXHAUSTED=false
+
+apt_update() {
+    # Once five attempts have failed, stop. install_pkgs calls this again on each of its own
+    # retries, and without this the two loops multiply into fifteen update attempts and
+    # several minutes of backoff before the script gives up.
+    if [ "$APT_UPDATE_EXHAUSTED" = true ]; then
+        return 1
+    fi
+    local attempt start=$SECONDS
+    for attempt in 1 2 3 4 5; do
+        if apt-get update >/tmp/apt-update.log 2>&1; then
+            APT_UPDATED=true
+            log "apt-get update succeeded in $((SECONDS - start))s (attempt ${attempt})"
+            return 0
+        fi
+        log "apt-get update failed (attempt ${attempt} of 5):"
+        tail -5 /tmp/apt-update.log 2>/dev/null | sed 's/^/[setup]   apt: /' || true
+        sleep $((attempt * 5))
+    done
+    APT_UPDATE_EXHAUSTED=true
+    log "WARNING: apt-get update never succeeded, so the package lists are absent or stale."
+    log "WARNING: expect installs below to fail with 'no installation candidate'. That"
+    log "WARNING: message names the package, not the real problem, which is this."
+    return 1
+}
+
+# Updates once, not once per install. The old version ran a fresh update inside every
+# attempt of every call, so a healthy run fetched the lists twice for no reason.
 install_pkgs() {
     local attempt
     for attempt in 1 2 3; do
-        apt-get update >/dev/null 2>&1 || true
+        # Refresh on the first call, and again on any retry: a stale list is the most likely
+        # reason an install of a package that certainly exists just failed.
+        if [ "$APT_UPDATED" != true ] || [ "$attempt" -gt 1 ]; then
+            apt_update || true
+        fi
         if apt-get install -y -qq "$@" >/tmp/apt-install.log 2>&1; then
             return 0
         fi
-        log "apt install of '$*' failed (attempt ${attempt}):"
-        tail -8 /tmp/apt-install.log | sed 's/^/[setup]   apt: /'
+        log "apt install of '$*' failed (attempt ${attempt} of 3):"
+        tail -8 /tmp/apt-install.log 2>/dev/null | sed 's/^/[setup]   apt: /' || true
         sleep 10
     done
     return 1
@@ -149,8 +194,21 @@ fi
 
 phase "install Node ${NODE_MAJOR}"
 log "installing Node ${NODE_MAJOR}"
-curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null 2>&1
-apt-get install -y -qq nodejs >/dev/null
+# Same failure shape as the apt update above, and Node is not optional. The nodesource
+# script adds a repo and refreshes the lists; if it fails with its output discarded, the
+# install below reports "Unable to locate package nodejs" and nothing says why.
+if ! curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/tmp/nodesource.log 2>&1; then
+    log "the nodesource setup script failed:"
+    tail -10 /tmp/nodesource.log 2>/dev/null | sed 's/^/[setup]   /' || true
+fi
+
+# It refreshed the lists itself, so let install_pkgs skip straight to installing, and get
+# its retries and diagnostics for free.
+APT_UPDATED=true
+install_pkgs nodejs || {
+    echo "[setup] FAILED: could not install nodejs, so neither lab service can run" >&2
+    exit 1
+}
 log "node $(node --version), npm $(npm --version)"
 
 # Go is only needed for Module 6, but installing it here rather than in that challenge's
