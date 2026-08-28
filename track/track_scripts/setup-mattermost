@@ -5,10 +5,10 @@
 # WHY THIS DOES MORE THAN DIAGNOSE
 #
 # Mattermost starts as soon as the container does, which can be before the sandbox's
-# internal DNS has a record for the `postgres` host. Mattermost retries the database for
+# internal DNS has a record for the `a-postgres` host. Mattermost retries the database for
 # about ten seconds and then exits fatally:
 #
-#   "dial tcp: lookup postgres on 169.254.169.254:53: no such host"
+#   "dial tcp: lookup a-postgres on 169.254.169.254:53: no such host"
 #   "failed to initialize platform: cannot create store"  commands/server.go:75
 #
 # Nothing restarts it. PID 1 in an Instruqt container is the platform's own sandbox-agent,
@@ -17,6 +17,8 @@
 # whether DNS beat Mattermost by a few seconds.
 #
 # This script runs after the sandbox is wired up, so by the time it executes DNS resolves.
+# It also runs after setup-a-postgres, because Instruqt orders setup scripts by hostname
+# and the `a-` prefix encodes that (see track/config.yml).
 # It confirms Postgres is reachable and relaunches the server if it died. Diagnostics are
 # still printed on the way, because a different failure needs to be visible: lifecycle
 # script stdout is the only log Instruqt surfaces, and each script sees one host.
@@ -39,13 +41,13 @@ say "MM_ env var count: $(env 2>/dev/null | grep -c '^MM_' || echo 0)"
 # Mattermost needed and may not have had.
 pg_ready=no
 for _ in $(seq 1 30); do
-    if timeout 3 bash -c 'echo > /dev/tcp/postgres/5432' 2>/dev/null; then
+    if timeout 3 bash -c 'echo > /dev/tcp/a-postgres/5432' 2>/dev/null; then
         pg_ready=yes
         break
     fi
     sleep 2
 done
-say "postgres:5432 reachable: ${pg_ready}"
+say "a-postgres:5432 reachable: ${pg_ready}"
 
 # Give a healthy server a moment before concluding anything.
 for _ in $(seq 1 20); do

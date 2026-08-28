@@ -11,6 +11,20 @@ version: "3"
 # be lost if the pod restarted. A VM disk survives a process restart. The VM also carries
 # the Go and Node toolchains that Module 6 needs regardless.
 #
+# The `a-` on `a-postgres` is the start order, not decoration. Instruqt runs lifecycle
+# scripts "in alphanumeric order, based on hostnames"
+# (docs.instruqt.com/sandboxes/lifecycle-scripts/scripting-overview), and serially across
+# hosts rather than in parallel, so track load time is the sum of every host's setup and not
+# the longest of them. The prefix puts the database ahead of the server that needs it:
+# `a-postgres`, then `mattermost`, then `workbench`. Renaming a host reorders setup silently,
+# so do not rename one without checking what depends on going first.
+#
+# Only the database host is prefixed, because the other two already sort correctly after it
+# and both of their names are visible to the learner: `mattermost` through SiteURL, in
+# permalinks and the System Console, and `workbench` in URLs they paste by hand in Modules 2
+# to 4. A digit would read better than `a-` and is not allowed, since Instruqt requires a
+# hostname to start with a letter and rejects `1-postgres` at validate.
+#
 # Two constraints found by testing, both undocumented and both silent when violated:
 #
 #   1. Base images must be Debian-family. Instruqt injects its own sandbox-agent as PID 1
@@ -24,7 +38,7 @@ version: "3"
 #      variables below pin them absolutely.
 
 containers:
-- name: postgres
+- name: a-postgres
   image: postgres:15
   memory: 1024
   environment:
@@ -40,24 +54,29 @@ containers:
   # container's startup cannot be wrapped or delayed. Verified, not assumed. A
   # `command: ["bash","-c","...wait for postgres...; exec mattermost"]` entry passed
   # `instruqt track validate`, pushed, and had no effect: the server still started
-  # immediately and still died with "cannot create store". Assume `entrypoint:` is the
-  # same and do not spend another run on it.
+  # immediately and still died with "cannot create store".
+  #
+  # `cmd:` and `entrypoint:` are NOT ruled out by that result. `command:` is
+  # docker-compose's key name, and Instruqt's own host documentation lists Entrypoint and
+  # Cmd as container settings. Its published config.yml schema lists neither, but that
+  # schema also omits `ports:` and `environment:`, which this stanza uses and which plainly
+  # work, so absence from the reference proves nothing.
   #
   # This matters because Mattermost loses a DNS race on every single boot. The container
-  # starts before the sandbox has a record for `postgres`, and Mattermost gives the
+  # starts before the sandbox has a record for `a-postgres`, and Mattermost gives the
   # database about 8 seconds before exiting fatally: DBPingAttempts is 5
   # (channels/store/sqlstore/store.go) with a 2s DBConnRetrySleep
   # (public/utils/sql/sql_utils.go), both compile-time constants, and an NXDOMAIN returns
   # instantly rather than consuming the 10s ping timeout. No setting changes any of that.
   #
-  # So the race cannot be eliminated from here, and setup-mattermost relaunching the
-  # server by hand stays load-bearing. Controlling startup would mean baking a custom
-  # image, which is already on the list below for other reasons.
+  # So the relaunch in setup-mattermost stays load bearing until something starts this
+  # container after the database. The host ordering above is the cheap candidate; failing
+  # that it is `cmd:`, or baking an image whose entrypoint waits.
   ports:
   - 8065
   environment:
     MM_SQLSETTINGS_DRIVERNAME: postgres
-    MM_SQLSETTINGS_DATASOURCE: "postgres://mmuser:mmuser_password@postgres:5432/mattermost?sslmode=disable&connect_timeout=10"
+    MM_SQLSETTINGS_DATASOURCE: "postgres://mmuser:mmuser_password@a-postgres:5432/mattermost?sslmode=disable&connect_timeout=10"
     MM_SERVICESETTINGS_SITEURL: http://mattermost:8065
 
     # Required. See constraint 2 above.

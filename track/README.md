@@ -21,9 +21,11 @@ instruqt track open         # open it in a browser
 
 ```
 track.yml                     metadata, tags, time limits
-config.yml                    the sandbox: one VM host named workbench
-track_scripts/
-  setup-workbench             runs once before the learner starts
+config.yml                    the sandbox: two container hosts and a VM
+track_scripts/                run once before the learner starts, in this order
+  setup-a-postgres            waits for the database, diagnostics only
+  setup-mattermost            relaunches the server if it lost its startup race
+  setup-workbench             toolchains, lab code, Mattermost seeding, services
   cleanup-workbench           runs once at the end
 NN-<name>/
   assignment.md               frontmatter (tabs, difficulty, timelimit) plus instructions
@@ -69,9 +71,19 @@ full reasoning.
 
 | Host | Type | Runs |
 | --- | --- | --- |
-| `postgres` | container | `postgres:15`, official image |
+| `a-postgres` | container | `postgres:15`, official image |
 | `mattermost` | container | `mattermost/mattermost-team-edition:10.5`, official image |
 | `workbench` | VM | labsvc, the learner's handler, code-server, and the Go/Node toolchains |
+
+The `a-` prefix is the start order. Instruqt runs setup scripts serially in alphanumeric
+hostname order, so it puts the database ahead of the server that needs it. Only that host is
+prefixed: the other two already sort correctly after it, and both of their names are visible
+to the learner.
+
+Serially means the learner's wait is the sum of all three hosts' setup, not the longest of
+them. Hot start would move that off the loading screen, and it is not enabled here. It is a
+per-track setting in the Instruqt web UI rather than anything in `track.yml`, so the repo
+cannot tell you either way.
 
 Mattermost and Postgres are containers because the official images work unmodified and the
 platform keeps them away from anything the learner breaks. The learner's mutable code is on
@@ -96,7 +108,7 @@ Track setup clones <https://github.com/wiggin77/cert-lab-platform-extensions> to
 | --- | --- |
 | `/opt/lab/labsvc/` | the labsvc package, including `scripts/` |
 | `/opt/lab/variants/` | solution overlays and `apply-variant.sh` |
-| `/opt/lab/bin/` | `lab-seed`, `lab-configure-agents`, `lab-set-webhook`, `lab-set-token` |
+| `/opt/lab/bin/` | the `lab-*` helpers: seeding, Agents config, integration and plugin creation, and the `lab-set-*` scripts the assignments tell the learner to run |
 | `/etc/lab.env` | environment shared by `mm-labsvc` and `mm-handler` |
 | `/home/learner/handler/` | the learner's own copy, modules 2 to 5 |
 | `/home/learner/plugin/` | the plugin scaffold, module 6 |
@@ -114,15 +126,6 @@ branch.
 assignment tells the learner to use. System admin because they configure integrations and
 upload a plugin. A separate `labadmin` account exists purely so the grader holds a token
 the learner cannot invalidate by logging out.
-
-## Not built yet
-
-- Solution variants for modules 4, 5, and 6, so four of the six `solve-workbench` scripts
-  will fail until those land.
-- The Module 6 plugin scaffold.
-- Setup takes 5m38s on a clean sandbox, ~3m20s of it warming the Module 6 plugin build
-  caches. Hot start is not enabled on this track, so the learner waits for all of it.
-  Baking a custom VM image would remove it entirely.
 
 ## Deploying a change
 

@@ -140,9 +140,12 @@ The track setup script must set a dummy non-empty value when pointing it at
 
 ## Instruqt platform behaviour
 
-Found by testing, none of it documented, each silent when violated. `track/config.yml` and
-`DESIGN.md` section 3.0 carry the detail.
+Each silent when violated, and only the script ordering below is documented by Instruqt.
+`track/config.yml` and `DESIGN.md` section 3.0 carry the detail.
 
+- **Setup scripts run serially, in alphanumeric hostname order.** Load time is the sum of
+  every host's setup, not the longest, and the `a-` on `a-postgres` is what puts the
+  database ahead of `mattermost`. Renaming a host reorders setup.
 - Container hosts have **no persistent storage**. `volumes:` validates and is ignored.
 - Base images must be **Debian-family**. Alpine/musl fails to provision with an SSH
   handshake error, because Instruqt injects its own `sandbox-agent` as PID 1.

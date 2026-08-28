@@ -62,7 +62,7 @@ code lives on a VM.
 flowchart TB
     subgraph containers["Container hosts"]
         MM["mattermost :8065<br/><i>tab: Mattermost</i>"]
-        PG[("postgres :5432")]
+        PG[("a-postgres :5432")]
     end
 
     subgraph vm["workbench (VM)"]
@@ -89,8 +89,12 @@ purely for startup time.
 
 ### 3.0 Platform behaviour worth knowing before changing this
 
-All three were found by testing, none are documented, and each is silent when violated.
+Each is silent when violated. Only the first is documented; the rest were found by testing.
 
+- **Setup scripts run serially, in alphanumeric hostname order.** Track load time is
+  therefore the sum of every host's setup, not the longest of them, and the `a-` on
+  `a-postgres` is what puts the database ahead of `mattermost` and `workbench`. Renaming a
+  host reorders setup with nothing to warn you.
 - **Base images must be Debian-family.** Instruqt injects its own `sandbox-agent` as PID 1,
   and an Alpine/musl image fails to provision with an SSH handshake error. This is why
   Postgres is not the `-alpine` tag.

@@ -5,17 +5,16 @@
 # Mattermost and Postgres are separate container hosts, so nothing here provisions them.
 # This script's job is the VM: toolchains, the lab code, and the services.
 #
-# Learners cannot start until this exits 0, and MEASURED IT IS SLOW: 5m38s on a clean
-# sandbox, of which about 3m20s is warming the plugin build caches in section 4b.
+# Learners cannot start until this exits 0, and it is the slowest thing in the track by a
+# wide margin. It also runs LAST: Instruqt orders setup scripts by hostname and runs them
+# serially, so the learner's wait is this script plus every other host's, not the longest of
+# them.
 #
-# Hot start would hide this by running track-level setup during pre-warm, before anyone
-# clicks Launch. It is NOT currently enabled on this track (there is no hot start setting
-# in track.yml, and it is configured per track in the Instruqt web UI, not by the CLI), so
-# right now a learner watches the whole thing on the loading screen. Earlier comments here
-# claimed hot start absorbed it, which was wishful.
-#
-# Two ways out, in order of effort: enable hot start on the track, or bake a custom VM
-# image with the toolchains, Go module cache and node_modules already present.
+# It prints its own phase breakdown, so read the summary at the end of a run rather than
+# guessing where the time went. Hot start is ruled out on cost (you are billed for unclaimed
+# pre-warmed sandboxes), so the fix has to make this script genuinely faster: bake a custom
+# VM image with the toolchains and caches already present, and overlap the independent
+# downloads and compiles, which today run strictly one after another.
 #
 set -euo pipefail
 
@@ -36,6 +35,55 @@ NODE_MAJOR=22
 GO_VERSION=1.25.5
 
 log() { echo "[setup] $*"; }
+
+# ---------------------------------------------------------------------------
+# Phase timing
+# ---------------------------------------------------------------------------
+# This script's stdout is the only thing Instruqt surfaces, so printing the breakdown is
+# the only way to learn where the time goes. Without it the whole cost is one aggregate
+# number and the three candidate fixes are indistinguishable: baking a custom VM image
+# helps if the cost is installing and compiling, a larger boot disk helps if it is writing
+# ~600 MB of caches to a 10 GB PD, and a larger machine_type helps if it is CPU. Those are
+# very different amounts of work to buy.
+#
+# SECONDS is a bash builtin holding whole seconds since the shell started, so this costs no
+# subprocesses. Every helper returns 0 explicitly: instrumentation that can fail the track
+# is worse than no instrumentation, and `set -e` would take a bare non-zero return as fatal.
+PHASE_NAME=""
+PHASE_START=0
+PHASE_LOG=()
+
+phase() {
+    local now=$SECONDS
+    if [ -n "$PHASE_NAME" ]; then
+        PHASE_LOG+=("$((now - PHASE_START))s ${PHASE_NAME}")
+        log "  ^ ${PHASE_NAME}: $((now - PHASE_START))s (${now}s into setup)"
+    fi
+    PHASE_NAME="${1:-}"
+    PHASE_START=$now
+    [ -n "$PHASE_NAME" ] && log "> ${PHASE_NAME}"
+    return 0
+}
+
+# On EXIT, so a run that fails halfway still reports what it got through. That is the case
+# where the breakdown matters most, and it is the case a summary printed just before
+# `exit 0` would miss.
+phase_summary() {
+    local code=$?
+    phase "" || true
+    log "=============================================================="
+    log "setup timing, longest first. total ${SECONDS}s, exit ${code}"
+    if [ "${#PHASE_LOG[@]}" -gt 0 ]; then
+        printf '%s\n' "${PHASE_LOG[@]}" | sort -rn | sed 's/^/[setup]   /' || true
+    fi
+    log "=============================================================="
+    return 0
+}
+trap phase_summary EXIT
+
+# Which resource is scarce is not answerable from the phase times alone, so record the
+# shape of the machine they were measured on.
+log "machine: $(nproc 2>/dev/null || echo '?') vCPU, root fs $(df -h / 2>/dev/null | awk 'NR==2{print $2" total, "$4" free"}' || echo '?')"
 
 wait_for() {
     local url="$1" name="$2" tries="${3:-90}" unit="${4:-}"
@@ -84,6 +132,7 @@ install_pkgs() {
 
 # make is in this list, not in build-essential below, because Module 6's plugin build is
 # driven by a Makefile. build-essential is allowed to fail; make is not.
+phase "apt base packages"
 install_pkgs git curl jq make ca-certificates || {
     echo "[setup] FAILED: could not install base packages" >&2
     exit 1
@@ -92,11 +141,13 @@ install_pkgs git curl jq make ca-certificates || {
 # Only needed if a native npm module or a cgo build shows up. Neither has, and Mattermost
 # plugins build with CGO_ENABLED=0, so its absence must not stop the track. It went
 # missing on a stock jammy image once, hence the diagnostic.
+phase "apt build-essential"
 if ! install_pkgs build-essential; then
     log "build-essential unavailable, continuing without it. apt says:"
     apt-cache policy build-essential 2>&1 | sed 's/^/[setup]   /'
 fi
 
+phase "install Node ${NODE_MAJOR}"
 log "installing Node ${NODE_MAJOR}"
 curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null 2>&1
 apt-get install -y -qq nodejs >/dev/null
@@ -105,6 +156,7 @@ log "node $(node --version), npm $(npm --version)"
 # Go is only needed for Module 6, but installing it here rather than in that challenge's
 # setup keeps challenge-level setup trivial, and means a learner never waits mid-challenge
 # with a 30 minute timer running. Measured at 3s, so it is not what makes setup slow.
+phase "install Go ${GO_VERSION}"
 log "installing Go ${GO_VERSION}"
 curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
 rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz
@@ -117,10 +169,12 @@ log "$(go version)"
 # ---------------------------------------------------------------------------
 id -u "$LEARNER" >/dev/null 2>&1 || useradd -m -s /bin/bash "$LEARNER"
 
+phase "git clone lab repo"
 log "cloning ${REPO_URL} @ ${REPO_REF}"
 rm -rf "$LAB_ROOT"
 git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$LAB_ROOT" 2>&1 | sed 's/^/[setup]   /'
 
+phase "npm ci labsvc"
 log "installing labsvc dependencies"
 # Not --omit=dev. Both services run their TypeScript directly under tsx with no build
 # step, so tsx is a runtime dependency even though package.json lists it under
@@ -130,6 +184,7 @@ npm --prefix "${LAB_ROOT}/labsvc" ci --no-audit --no-fund >/dev/null
 
 # The learner gets their own copy. /opt/lab stays pristine so a reset can restore from it,
 # and so grading code is not sitting in a directory the learner can edit.
+phase "npm ci handler"
 log "installing the learner handler"
 rm -rf "${LEARNER_HOME}/handler"
 cp -r "${LAB_ROOT}/handler" "${LEARNER_HOME}/handler"
@@ -137,6 +192,7 @@ npm --prefix "${LEARNER_HOME}/handler" ci --no-audit --no-fund >/dev/null
 
 # The Module 6 plugin scaffold. Same reasoning as the handler: the learner edits their own
 # copy and /opt/lab stays pristine.
+phase "copy plugin scaffold"
 log "installing the plugin scaffold"
 rm -rf "${LEARNER_HOME}/plugin"
 cp -r "${LAB_ROOT}/plugin" "${LEARNER_HOME}/plugin"
@@ -151,6 +207,10 @@ done
 # ---------------------------------------------------------------------------
 # 3. Wait for Mattermost, which is provisioning in parallel as its own host
 # ---------------------------------------------------------------------------
+# Expected to be ~0s: setup scripts serialise by hostname, so setup-mattermost has already
+# run to completion. A non-trivial number here means the server died after that script
+# confirmed it.
+phase "wait for Mattermost"
 if ! wait_for http://mattermost:8065/api/v4/system/ping "Mattermost" 150; then
     echo "[setup] Mattermost runs on its own host, so its logs are not here." >&2
     echo "[setup] Look for the setup-mattermost output in this track log: it reports" >&2
@@ -192,6 +252,7 @@ fi
 # ---------------------------------------------------------------------------
 # lab-seed creates the team, channels, users, bot, and tokens, and appends the ids it
 # creates to LAB_ENV.
+phase "write lab.env and seed Mattermost"
 log "seeding Mattermost"
 cat > "$LAB_ENV" <<EOF
 # Written by track setup. Shared by mm-labsvc and mm-handler.
@@ -257,11 +318,13 @@ chmod 755 "$LEARNER_HOME"
 # Go module graph and the webpack toolchain while the learner watches a stalled terminal,
 # inside a 30 minute challenge timer.
 #
-# THIS IS THE EXPENSIVE PART OF SETUP: measured at ~3m20s of a 5m38s total, dominated by
-# fetching and compiling the Go dependency tree. The trade is deliberate, because the
-# alternative spends it inside a timed challenge instead of on the loading screen, but it
-# is the first thing to attack. Baking it into a custom VM image removes it outright;
-# enabling hot start moves it before the learner arrives.
+# THIS IS THE EXPENSIVE PART OF SETUP, by a wide margin. The trade is deliberate, because
+# the alternative spends it inside a timed challenge instead of on the loading screen, but
+# it is the first thing to attack, and baking a custom VM image removes it outright.
+#
+# The four phases below are timed separately on purpose. Do not re-lump them: which of
+# download, compile, and npm dominates is what decides whether the answer is baked caches,
+# a bigger machine_type, or a bigger boot disk.
 #
 # It runs as the learner, not root, and that matters: a module cache under /root is not
 # readable by them, so the download would silently happen again on first build. Same for
@@ -269,16 +332,30 @@ chmod 755 "$LEARNER_HOME"
 #
 # Non-fatal. A network hiccup here costs the learner time, but the track still works.
 log "warming the plugin build caches"
+
+# The download and the compile are run as two commands rather than one so the timing can
+# separate them. They are bound by different resources, network and disk versus CPU, and
+# they point at different fixes. Lumping them is how this section's cost came to be
+# attributed to "fetching and compiling the Go dependency tree" without evidence for the
+# split.
+phase "go mod download"
+if ! su -l "$LEARNER" -c "cd ~/plugin && go mod download" >/tmp/plugin-warm-go.log 2>&1; then
+    log "WARNING: the Go module download failed, Module 6's first build will be slow:"
+    tail -5 /tmp/plugin-warm-go.log | sed 's/^/[setup]   /'
+fi
+
 # `go test -run` with a pattern that matches nothing compiles the test binary without
 # running it. That is deliberate: it pulls the test-only dependencies into the cache as
 # well as the build ones, so `make test` is also instant. `go mod download` alone leaves
 # testify to be fetched on first use.
-if ! su -l "$LEARNER" -c "cd ~/plugin && go mod download && go test -run XXXNoSuchTest ./server/" \
-    >/tmp/plugin-warm-go.log 2>&1; then
-    log "WARNING: warming the Go cache failed, Module 6's first build will be slow:"
+phase "go compile test binary"
+if ! su -l "$LEARNER" -c "cd ~/plugin && go test -run XXXNoSuchTest ./server/" \
+    >>/tmp/plugin-warm-go.log 2>&1; then
+    log "WARNING: warming the Go build cache failed, Module 6's first build will be slow:"
     tail -5 /tmp/plugin-warm-go.log | sed 's/^/[setup]   /'
 fi
 
+phase "npm install plugin webapp"
 if ! su -l "$LEARNER" -c "cd ~/plugin/webapp && npm install --no-audit --no-fund" >/tmp/plugin-warm-npm.log 2>&1; then
     log "WARNING: npm install for the plugin webapp failed:"
     tail -5 /tmp/plugin-warm-npm.log | sed 's/^/[setup]   /'
@@ -286,10 +363,19 @@ fi
 
 # Build both halves once, so a broken scaffold surfaces here rather than as the learner's
 # first experience of Module 6.
+phase "make bundle"
 if ! su -l "$LEARNER" -c "cd ~/plugin && make bundle" >/tmp/plugin-warm-build.log 2>&1; then
     log "WARNING: the plugin scaffold does not build:"
     tail -20 /tmp/plugin-warm-build.log | sed 's/^/[setup]   /'
 fi
+
+# Bytes written, so the phase times above can be read as throughput rather than just
+# duration. Slow phases against this volume mean the boot disk is the constraint, which a
+# larger disk on a custom image fixes more cheaply than baking the caches themselves.
+log "cache sizes after warming:"
+for d in "go/pkg/mod" ".cache/go-build" "plugin/webapp/node_modules"; do
+    log "  ${d}: $(du -sh "${LEARNER_HOME}/${d}" 2>/dev/null | cut -f1 || echo '?')"
+done
 
 # ---------------------------------------------------------------------------
 # 5. Services
@@ -297,6 +383,7 @@ fi
 # labsvc runs as its own user so the journal file is not writable by the learner. That
 # only defeats casual tampering, since the learner has sudo, which is the right level:
 # labs are formative and the exam is the real gate.
+phase "write systemd units"
 id -u labsvc >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin labsvc
 chown -R labsvc:labsvc /var/lib/labsvc
 
@@ -397,6 +484,7 @@ KillMode=mixed
 WantedBy=multi-user.target
 EOF
 
+phase "install code-server"
 log "installing code-server"
 curl -fsSL https://code-server.dev/install.sh | sh >/dev/null 2>&1
 mkdir -p "${LEARNER_HOME}/.config/code-server"
@@ -407,6 +495,7 @@ cert: false
 EOF
 chown -R "${LEARNER}:${LEARNER}" "${LEARNER_HOME}/.config"
 
+phase "start services"
 systemctl daemon-reload
 systemctl enable --now mm-labsvc
 wait_for http://localhost:4000/healthz "labsvc" 60 mm-labsvc
@@ -418,6 +507,7 @@ systemctl enable --now "code-server@${LEARNER}"
 
 # Now that the mock LLM is actually being served, point the Agents plugin at it. Non-fatal:
 # everything except Module 6's AI skills works without it.
+phase "configure Agents plugin"
 "${LAB_ROOT}/bin/lab-configure-agents" || log "WARNING: Agents setup failed, Module 6 AI skills will not work"
 
 log "setup complete"
