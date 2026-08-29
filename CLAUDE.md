@@ -154,10 +154,12 @@ Each silent when violated, and only the script ordering below is documented by I
 - Instruqt **ignores the image's `WORKDIR`** and runs from `/`.
 - **A container process that exits is not restarted.** Mattermost can lose a startup race
   against sandbox DNS, exit fatally, and stay down for the life of the sandbox.
-  `setup-mattermost` relaunches it. Across four measured runs, three had the server up in
-  4 to 8s and one entered the relaunch path and took 2m28s, so this is **the largest source
-  of variance in track load time**, not a small fixed cost. Do not describe it as usually
-  fine without fresh numbers.
+  `setup-mattermost` relaunches it, and **the race is lost about half the time**: across
+  nine measured runs, five had the server up in 4 to 8s and four took 2m25s to 2m28s in the
+  relaunch path. Since the split a toolchain-free track finishes `setup-workbench` in ~71s,
+  so a lost race now costs more than everything else in the sandbox combined, and it is the
+  largest single term in track load time. An image cannot fix it; `cmd:` on the container
+  could. Do not describe it as usually fine without fresh numbers.
 - Lifecycle script stdout is the **only** log Instruqt surfaces, and each script sees one
   host. A failure with no printed reason costs a full run to diagnose, so scripts print
   their own diagnostics (`wait_for` dumps `journalctl`; each container has a setup script).
@@ -505,14 +507,24 @@ grader framework, checks for all six challenges, snapshot and reset, inspector U
 scaffold, the Instruqt track configuration, the plugin scaffold with its test suite, and
 solution variants for every module including `mod6-server` and `mod6-webapp`.
 
-Challenges 1 to 4 pass end to end on Instruqt, 14 out of 14 checks.
+**All six challenges pass end to end on Instruqt, across all five sandbox tracks**
+(2026-08-29). `instruqt track test` drives setup, check-expecting-failure, solve, and
+check-expecting-success for every challenge, and all five tracks return `Track test
+succeeded`. Module 6 completed a full Instruqt run for the first time in that batch, both
+the server and the webapp challenge, so the "verified locally only" caveat that stood here
+is retired.
 
-Challenges 5 and 6 are verified locally only: both halves build, vet, gofmt and typecheck
-clean, all 16 Go tests pass against the solution, and the solution bundle is 6.4 KB
-containing all three registry symbols. Neither has yet completed a full Instruqt run.
+`instruqt track test` per track is now a usable CI loop in everything but name, and it is
+what the "not built" note below used to refer to. It still needs a live sandbox, so a pull
+request cannot run it.
 
-Not built: the CI loop described above, and a baked VM image with the toolchains
-pre-installed.
+Setup cost, measured in that batch: **71s** for a track without the plugin toolchain,
+**315s** for track 6 with it. The gap is the 191s of Go and plugin work plus `build-essential`
+and Agents, which is what `NEEDS_PLUGIN_TOOLCHAIN` skips.
+
+Not built: a baked VM image with the toolchains pre-installed, and CI that runs without a
+sandbox. Note the image is now a smaller win than the Mattermost DNS race above, which it
+cannot fix.
 
 **Nothing in Module 6's UI has been seen in a browser.** The grader inspects the bundle for
 registrations and says outright that it does not verify rendering. The reasoning behind the

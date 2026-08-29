@@ -69,20 +69,26 @@ containers:
   # (public/utils/sql/sql_utils.go), both compile-time constants, and an NXDOMAIN returns
   # instantly rather than consuming the 10s ping timeout. No setting changes any of that.
   #
-  # The race is neither always lost nor always won, and both earlier versions of this comment
-  # were wrong about it. It first claimed the race was lost on every single boot; it was then
-  # softened to say measured runs win it. Four measured runs now say otherwise:
+  # The race is lost about half the time. Two earlier versions of this comment were wrong in
+  # opposite directions, first claiming it was lost on every single boot, then that measured
+  # runs win it. Nine measured runs, 2026-08-29:
   #
-  #   3 runs   setup-mattermost took 4 to 8s, server already up, relaunch never entered
-  #   1 run    setup-mattermost took 2m28s, logging "relaunching the server now that DNS
-  #            resolves" (2026-08-29T18:02:07Z, participant py5ubaxocbzq)
+  #   5 runs   4 to 8s. Server already up, relaunch never entered.
+  #   4 runs   2m25s to 2m28s, logging "relaunching the server now that DNS resolves".
   #
-  # So the relaunch path is real, is entered perhaps a quarter of the time, and costs about
-  # two and a half minutes when it is. That makes setup-mattermost the largest source of
-  # variance in track load time, not a fixed small cost. It stays because losing the race
-  # otherwise leaves the server down for the life of the sandbox. If it is ever worth
-  # removing rather than tolerating, the fix is `cmd:` above, or an image whose entrypoint
-  # waits for the database. Do not re-summarise this as "usually fine" without new numbers.
+  # Two of those four were in a batch of four tracks launched simultaneously, and the other
+  # two were solo, so it is not simply contention. The wins and losses do cluster in time,
+  # which points at something about the platform rather than about this track.
+  #
+  # THE CONSEQUENCE IS NOW BIGGER THAN IT LOOKS. Since the split, a track without the plugin
+  # toolchain finishes setup-workbench in about 71s, so a lost race costs twice as much as
+  # everything else in the sandbox put together, and it is the single largest term in track
+  # load time. A custom VM image does nothing for it. If it is ever worth fixing rather than
+  # tolerating, the fix is `cmd:` above, or an image whose entrypoint waits for the database.
+  #
+  # The relaunch itself stays regardless: losing the race without it leaves the server down
+  # for the life of the sandbox. Do not re-summarise this as "usually fine" without new
+  # numbers, and do not delete the relaunch because a few runs looked healthy.
   ports:
   - 8065
   environment:

@@ -1,7 +1,7 @@
 # Splitting the track into per-module tracks
 
-Status: W1, W2, W3 and W5 implemented and validating locally.
-W4, W6 and W7 change remote state and are not started.
+Status: W1 to W6 done. All six tracks are pushed, and all five sandbox tracks pass
+`instruqt track test` end to end (2026-08-29). Only W7, retiring the old track, remains.
 Supersedes: nothing. Blocks: the custom VM image (see "Why this comes first")
 
 ## Goal
