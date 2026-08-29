@@ -154,8 +154,10 @@ Each silent when violated, and only the script ordering below is documented by I
 - Instruqt **ignores the image's `WORKDIR`** and runs from `/`.
 - **A container process that exits is not restarted.** Mattermost can lose a startup race
   against sandbox DNS, exit fatally, and stay down for the life of the sandbox.
-  `setup-mattermost` relaunches it. Measured runs win the race, so treat that script as
-  insurance rather than as a cost worth optimising.
+  `setup-mattermost` relaunches it. Across four measured runs, three had the server up in
+  4 to 8s and one entered the relaunch path and took 2m28s, so this is **the largest source
+  of variance in track load time**, not a small fixed cost. Do not describe it as usually
+  fine without fresh numbers.
 - Lifecycle script stdout is the **only** log Instruqt surfaces, and each script sees one
   host. A failure with no printed reason costs a full run to diagnose, so scripts print
   their own diagnostics (`wait_for` dumps `journalctl`; each container has a setup script).

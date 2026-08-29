@@ -69,12 +69,20 @@ containers:
   # (public/utils/sql/sql_utils.go), both compile-time constants, and an NXDOMAIN returns
   # instantly rather than consuming the 10s ping timeout. No setting changes any of that.
   #
-  # An earlier version of this comment said the race was lost on every single boot. That is
-  # not holding: measured runs have Mattermost up before its setup script even starts, and
-  # that script costs about 5 seconds rather than the two and a half minutes the relaunch
-  # path implies. The relaunch stays because losing the race leaves the server down for the
-  # life of the sandbox, but treat it as insurance and not as a cost worth optimising. If it
-  # ever needs a real fix, it is `cmd:` above, or an image whose entrypoint waits.
+  # The race is neither always lost nor always won, and both earlier versions of this comment
+  # were wrong about it. It first claimed the race was lost on every single boot; it was then
+  # softened to say measured runs win it. Four measured runs now say otherwise:
+  #
+  #   3 runs   setup-mattermost took 4 to 8s, server already up, relaunch never entered
+  #   1 run    setup-mattermost took 2m28s, logging "relaunching the server now that DNS
+  #            resolves" (2026-08-29T18:02:07Z, participant py5ubaxocbzq)
+  #
+  # So the relaunch path is real, is entered perhaps a quarter of the time, and costs about
+  # two and a half minutes when it is. That makes setup-mattermost the largest source of
+  # variance in track load time, not a fixed small cost. It stays because losing the race
+  # otherwise leaves the server down for the life of the sandbox. If it is ever worth
+  # removing rather than tolerating, the fix is `cmd:` above, or an image whose entrypoint
+  # waits for the database. Do not re-summarise this as "usually fine" without new numbers.
   ports:
   - 8065
   environment:

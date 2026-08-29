@@ -384,34 +384,6 @@ EOF
 #
 # It is a no-op on track 2, which has nothing before it. Runs before the chown below,
 # because it writes into the learner's handler.
-#
-# Track 2 has nothing before it, so it does not call the script at all. That also means a
-# clone too old to contain the script cannot break the one track that does not need it.
-if [ "$LAB_TRACK" -gt 2 ]; then
-    SEED_PRIORS="${LAB_ROOT}/bin/lab-seed-prior-modules"
-
-    # This script arrives with the GitHub clone, not with the track. A track pushed ahead of
-    # its code lands here, and without this guard the only symptom is `No such file or
-    # directory` and `Process exited with status 127`, which names the missing file but not
-    # the reason it is missing. Two deploys, two commands, and this is the seam between them.
-    if [ ! -x "$SEED_PRIORS" ]; then
-        echo "[setup] FAILED: ${SEED_PRIORS} is missing from the clone." >&2
-        echo "[setup]" >&2
-        echo "[setup] This track config expects it, so the clone is older than the track." >&2
-        echo "[setup] Code and track config deploy separately:" >&2
-        echo "[setup]" >&2
-        echo "[setup]     git push                                  ships bin/, labsvc/, handler/, variants/" >&2
-        echo "[setup]     cd tracks/<track> && instruqt track push   ships config and lifecycle scripts" >&2
-        echo "[setup]" >&2
-        echo "[setup] Run the git push, then start the track again. To test an unmerged" >&2
-        echo "[setup] branch instead, set LAB_REPO_REF to it." >&2
-        echo "[setup] Clone is ${REPO_URL} @ ${REPO_REF}." >&2
-        exit 1
-    fi
-
-    phase "seed prior modules"
-    "$SEED_PRIORS" "$LAB_TRACK" 2>&1 | sed 's/^/[setup]   /'
-fi
 
 # The learner has to be able to read this. Module 6 tells them to run `make deploy`, which
 # uploads a plugin over the REST API, and that needs the admin token. Instruqt runs
@@ -641,6 +613,50 @@ systemctl enable --now mm-handler
 wait_for http://localhost:3000/healthz "handler" 60 mm-handler
 
 systemctl enable --now "code-server@${LEARNER}"
+
+# ---------------------------------------------------------------------------
+# 5b. Every module before this track's, already done
+# ---------------------------------------------------------------------------
+# A learner arriving at track 4 has not built modules 2 and 3 in this sandbox, but the
+# challenge assumes their behaviour is present: module 4's slash command enriches alerts
+# module 2 formats. Without this a track is unsolvable for reasons unrelated to its lesson.
+#
+# THIS HAS TO RUN AFTER THE SERVICES ARE UP, not next to lab-seed where it looks like it
+# belongs. lab-create-integration calls lab-set-webhook, which restarts mm-labsvc and then
+# checks the webhook responds, so both units must exist and be healthy first. Placed in
+# section 4 it fails with "mm-labsvc did not restart", which reads like a broken service
+# rather than a script running sixty seconds too early.
+#
+# Running after mm-handler is up is also what makes applying the variants work: tsx watch
+# is already running, so it picks the new files up rather than needing a restart.
+#
+# Track 2 has nothing before it and does not call the script at all, so the one track that
+# needs no seeding cannot be broken by a clone too old to contain it.
+if [ "$LAB_TRACK" -gt 2 ]; then
+    SEED_PRIORS="${LAB_ROOT}/bin/lab-seed-prior-modules"
+
+    # This script arrives with the GitHub clone, not with the track. A track pushed ahead of
+    # its code lands here, and without this guard the only symptom is `No such file or
+    # directory` and `Process exited with status 127`, which names the missing file but not
+    # the reason it is missing. Two deploys, two commands, and this is the seam between them.
+    if [ ! -x "$SEED_PRIORS" ]; then
+        echo "[setup] FAILED: ${SEED_PRIORS} is missing from the clone." >&2
+        echo "[setup]" >&2
+        echo "[setup] This track config expects it, so the clone is older than the track." >&2
+        echo "[setup] Code and track config deploy separately:" >&2
+        echo "[setup]" >&2
+        echo "[setup]     git push                                  ships bin/, labsvc/, handler/, variants/" >&2
+        echo "[setup]     cd tracks/<track> && instruqt track push   ships config and lifecycle scripts" >&2
+        echo "[setup]" >&2
+        echo "[setup] Run the git push, then start the track again. To test an unmerged" >&2
+        echo "[setup] branch instead, set LAB_REPO_REF to it." >&2
+        echo "[setup] Clone is ${REPO_URL} @ ${REPO_REF}." >&2
+        exit 1
+    fi
+
+    phase "seed prior modules"
+    "$SEED_PRIORS" "$LAB_TRACK" 2>&1 | sed 's/^/[setup]   /'
+fi
 
 # Now that the mock LLM is actually being served, point the Agents plugin at it. Non-fatal:
 # everything except Module 6's AI skills works without it.
