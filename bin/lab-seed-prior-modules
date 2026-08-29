@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+#
+# Puts every module before this track's into place, so a standalone track starts from the
+# state a learner would have reached by working through the ones before it.
+#
+#   lab-seed-prior-modules 4     modules 2 and 3 done, module 4 left to the learner
+#   lab-seed-prior-modules 2     no-op, nothing precedes it
+#
+# The track number IS the curriculum module number (see DESIGN.md section 3.0), so the
+# argument is just the track number, and the modules to seed are 2 .. N-1.
+#
+# WHY THIS EXISTS. Splitting the six modules into separate tracks means each one gets a
+# fresh sandbox. Module 4's slash command enriches alerts that module 2 formats, and module
+# 5's Escalate button lives in the attachment module 2 builds, so a track that starts empty
+# is unsolvable for reasons that have nothing to do with its own lesson.
+#
+# WHAT IT MUST STAY EQUAL TO. Seeding module M does exactly what M's own solve-workbench
+# script does: create the integration, then apply the variant. Those two implementations
+# have to agree or a track seeds a state no solve script produces, which grades as a learner
+# error and is very hard to read as anything else. The table below is the shared definition;
+# if a solve script changes, change it here in the same commit.
+#
+#   module   integration            variant
+#   2        incoming-webhook       mod2       alerts formatted as attachments
+#   3        outgoing-webhook       mod3       CRITICAL alerts auto-escalate
+#   4        slash-command          mod4       /threat enrichment
+#   5        (none)                 mod5       Escalate button, dialog, assessment
+#
+# Module 5 adds no integration: interactive elements are declared in the message itself.
+# Module 6 is never a prior, because it is the last track.
+#
+# Variants are overlays, not snapshots, and ORDER MATTERS: mod5 overwrites mod2's
+# alert-payload.ts to add the Escalate button. Ascending order is what a learner would have
+# done, and is the only order that leaves the right file on top.
+#
+set -euo pipefail
+SCRIPT_NAME=lab-seed-prior-modules
+# shellcheck source=lab-common.sh
+source "$(dirname "$(readlink -f "$0")")/lab-common.sh"
+
+require_root "$@"
+
+TRACK="${1:-}"
+[ -n "$TRACK" ] || die "usage: ${SCRIPT_NAME} <track-number>"
+case "$TRACK" in
+    ''|*[!0-9]*) die "track must be a number, got '${TRACK}'" ;;
+esac
+[ "$TRACK" -ge 2 ] && [ "$TRACK" -le 6 ] || die "track must be 2 to 6, got ${TRACK}"
+
+BIN_DIR="$(dirname "$(readlink -f "$0")")"
+LAB_ROOT="$(dirname "$BIN_DIR")"
+HANDLER_DIR="${HANDLER_DIR:-/home/learner/handler}"
+
+integration_for() {
+    case "$1" in
+        2) echo incoming-webhook ;;
+        3) echo outgoing-webhook ;;
+        4) echo slash-command ;;
+        *) echo "" ;;
+    esac
+}
+
+if [ "$TRACK" -eq 2 ]; then
+    log "track 2 is the first lab, nothing to seed"
+    exit 0
+fi
+
+log "seeding modules 2 to $((TRACK - 1)) for track ${TRACK}"
+
+for m in $(seq 2 $((TRACK - 1))); do
+    kind="$(integration_for "$m")"
+    if [ -n "$kind" ]; then
+        log "module ${m}: creating ${kind}"
+        # Idempotent, so a re-run reuses an existing integration rather than creating a
+        # duplicate the graders would then have to disambiguate.
+        "${BIN_DIR}/lab-create-integration" "$kind"
+    else
+        log "module ${m}: no integration to create"
+    fi
+
+    log "module ${m}: applying variant mod${m}"
+    HANDLER_DIR="$HANDLER_DIR" "${LAB_ROOT}/variants/apply-variant.sh" "mod${m}" solution
+done
+
+# The variants land as root. Without this the learner cannot edit the very files the next
+# challenge asks them to build on, and the editor reports a permission error that names the
+# file rather than the cause.
+chown -R learner:learner "$HANDLER_DIR"
+
+log "seeded modules 2 to $((TRACK - 1))"

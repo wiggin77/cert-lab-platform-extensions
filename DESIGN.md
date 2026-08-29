@@ -5,6 +5,10 @@ certification track, hosted on Instruqt.
 
 Status: draft, for review
 Source curriculum: *Mattermost Certification, Platform Extension Expert, Track Overview v0.5*
+<https://docs.google.com/document/d/1whgMjz3kPOpVcQx_11us1YMMlaLIIqNP1M6gbFAiTl0/edit>
+
+That document is authoritative for the module numbering, which is why Module 1 is theory
+with no lab and the labs here start at Module 2. Check it before renumbering anything.
 
 ---
 

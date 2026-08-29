@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# Track cleanup. Runs once, after the learner finishes or abandons the track.
+#
+# The sandbox is destroyed straight after this, so there is nothing to tidy for its own
+# sake. What matters is stopping the ambient feed and noting the journal size while it
+# still exists, since that is the only record of what happened in this run.
+#
+set -uo pipefail
+
+log() { echo "[cleanup] $*"; }
+
+curl -sf -m 5 -X POST http://localhost:4000/mock/feed/stop >/dev/null 2>&1 || true
+
+if [ -f /var/lib/labsvc/journal.jsonl ]; then
+    log "journal contains $(wc -l < /var/lib/labsvc/journal.jsonl) events"
+fi
+
+systemctl stop mm-handler mm-labsvc 2>/dev/null || true
+systemctl stop 'code-server@learner' 2>/dev/null || true
+
+log "cleanup complete"
+exit 0

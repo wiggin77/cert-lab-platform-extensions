@@ -18,6 +18,8 @@ Two npm packages, no monorepo tooling. Install and run them independently.
 | `labsvc/` | Lab infrastructure. Recording proxy, mock services, grader, inspector. |
 | `handler/` | The learner's integration handler, modules 2 to 5. Ships to `/home/learner/handler`. |
 | `variants/` | Per-module solution overlays plus `apply-variant.sh`. |
+| `tracks/` | Six Instruqt tracks, one per curriculum module. See `tracks/README.md`. |
+| `track/` | **Frozen.** The pre-split single track, kept as the rollback. Do not edit. |
 
 ## Commands
 
@@ -171,19 +173,47 @@ is **unconditional**, not decided by the order the lines appear in the unit. The
 visible symptom is the Module 5 dialog check failing while everything else passes, because
 the outbound proxy records nothing.
 
+## Six tracks, one per curriculum module
+
+The six modules are six separate Instruqt tracks under `tracks/`. **The track number is the
+curriculum module number**, and also `LAB_MODULE` and the grader's module argument: track 4
+is module 4, sets `LAB_MODULE=4`, grades with `check-challenge.sh 4 1`. Track 1 is theory,
+has no sandbox, and carries placeholder content. Track 6 is the only one with two challenges
+and the only one that touches Go.
+
+Three things follow, and all three are load bearing:
+
+1. **Four files are copied, not generated**, and identical across the five sandbox tracks:
+   `config.yml`, `setup-a-postgres`, `setup-mattermost`, `cleanup-workbench`. A shared fix
+   lands five times. `bin/check-track-drift` is what tells you when it landed four. There is
+   deliberately no generator: it would silently revert hand edits and put a build step
+   between editing a setup script and pushing a track.
+2. **`setup-workbench` varies by exactly two variables**, `LAB_TRACK` and
+   `NEEDS_PLUGIN_TOOLCHAIN`, at the top of the file. The drift check normalises those out
+   and compares the rest, and asserts `LAB_TRACK` matches its directory. Put anything else
+   that needs to differ into those variables, not into a divergent copy.
+3. **Each track seeds the modules before it**, via `bin/lab-seed-prior-modules $LAB_TRACK`.
+   That script and the per-challenge `solve-workbench` scripts do the same work and must
+   agree, or a track seeds a state no solve script produces and it grades as a learner error.
+
+`NEEDS_PLUGIN_TOOLCHAIN=false` skips the Go toolchain, the plugin scaffold, all four build
+cache warming phases, and the Agents plugin: 191 s of a measured 309 s run, none of which
+anything but Module 6 uses.
+
 ## Two-step deploy
 
 Code and track config ship separately, and this is easy to trip over: you can push a track
 and see none of your code changes.
 
 ```bash
-git push                          # labsvc, handler, bin, variants  (cloned at setup)
-cd track && instruqt track push   # config, assignments, lifecycle scripts
+git push                                             # labsvc, handler, bin, variants
+cd tracks/4-slash-commands && instruqt track push    # config, assignments, lifecycle scripts
 ```
 
-Lifecycle scripts under `track/` deploy with the track, so they are testable without a git
+Lifecycle scripts under `tracks/` deploy with the track, so they are testable without a git
 push. Everything the sandbox clones needs GitHub first. Use `LAB_REPO_REF` to point a run
-at a branch.
+at a branch. There is no command that pushes all six tracks, so a change to a shared file
+means pushing each affected directory.
 
 ## The Instruqt CLI is yours to drive
 
@@ -191,7 +221,7 @@ at a branch.
 Do not ask the user to read the track playback screen or to paste log output. Fetch it.
 
 ```bash
-cd track
+cd tracks/4-slash-commands
 instruqt track validate     # local only, checks config.yml and every assignment
 instruqt track push         # the ONLY command here that changes remote state
 instruqt track logs         # lifecycle script output, see the warning below
@@ -199,8 +229,8 @@ instruqt track test         # run the track with its lifecycle scripts
 instruqt track open         # open it in a browser
 ```
 
-`validate` and `push` operate on the current directory, so they need `cd track`. `logs`
-takes a slug and works from anywhere:
+`validate` and `push` operate on the current directory, so they need a `cd` into one of the
+six under `tracks/`. `logs` takes a slug and works from anywhere:
 
 ```bash
 timeout 60 instruqt track logs platform-extensions --since 20m
@@ -221,6 +251,11 @@ are subtraction. Terraform provisioning is bracketed the same way.
 affect the run in progress, and the symptom is subtle: the log shows the *old* script names
 and hostnames while your local tree has the new ones. Check for a script name you renamed
 before concluding anything about a run's results.
+
+**`instruqt track pull` destroys `config.yml`'s comments.** It rewrites the file from the
+platform's parsed copy, so all 101 comment lines in this repo's sandbox definition vanish
+(153 lines become 37) with no warning. `track_scripts/` and `assignment.md` survive a pull
+intact; `config.yml` does not. Pull into a scratch directory, never into `tracks/`.
 
 **`instruqt track push` rewrites local files.** It normalises tab key order and the
 `checksum` in `track.yml`, so a push leaves you with an unstaged diff you did not write.

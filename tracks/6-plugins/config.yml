@@ -1,0 +1,153 @@
+version: "3"
+
+# Hybrid topology, chosen from empirical testing on a scratch track. See DESIGN.md.
+#
+# Mattermost and Postgres are containers: official images, zero build, and the platform
+# keeps them isolated from anything the learner breaks.
+#
+# The learner's mutable code stays on a VM. Container hosts have no persistent storage on
+# classic Tracks (a `volumes:` entry validates and is then silently ignored, verified by
+# probe), so learner-authored code in a container would live on an overlay filesystem and
+# be lost if the pod restarted. A VM disk survives a process restart. The VM also carries
+# the Go and Node toolchains that Module 6 needs regardless.
+#
+# The `a-` on `a-postgres` is the start order, not decoration. Instruqt runs lifecycle
+# scripts "in alphanumeric order, based on hostnames"
+# (docs.instruqt.com/sandboxes/lifecycle-scripts/scripting-overview), and serially across
+# hosts rather than in parallel, so track load time is the sum of every host's setup and not
+# the longest of them. The prefix puts the database ahead of the server that needs it:
+# `a-postgres`, then `mattermost`, then `workbench`. Renaming a host reorders setup silently,
+# so do not rename one without checking what depends on going first.
+#
+# Only the database host is prefixed, because the other two already sort correctly after it
+# and both of their names are visible to the learner: `mattermost` through SiteURL, in
+# permalinks and the System Console, and `workbench` in URLs they paste by hand in Modules 2
+# to 4. A digit would read better than `a-` and is not allowed, since Instruqt requires a
+# hostname to start with a letter and rejects `1-postgres` at validate.
+#
+# Two constraints found by testing, both undocumented and both silent when violated:
+#
+#   1. Base images must be Debian-family. Instruqt injects its own sandbox-agent as PID 1
+#      and an Alpine/musl image (nicolaka/netshoot) failed to provision with an SSH
+#      handshake error. This is why postgres is not the -alpine tag.
+#
+#   2. Instruqt ignores the image's WORKDIR and runs from /. Mattermost's plugin paths are
+#      relative by default, so plugin startup fails with
+#      "mkdir ./client/plugins: no such file or directory". That would have broken all of
+#      Module 6, as a warning in a log rather than a crash. The MM_PLUGINSETTINGS_*
+#      variables below pin them absolutely.
+
+containers:
+- name: a-postgres
+  image: postgres:15
+  memory: 1024
+  environment:
+    POSTGRES_USER: mmuser
+    POSTGRES_PASSWORD: mmuser_password
+    POSTGRES_DB: mattermost
+
+- name: mattermost
+  image: mattermost/mattermost-team-edition:10.5
+  memory: 2048
+
+  # Constraint 3, same shape as the two above: `command:` is ignored here, so the
+  # container's startup cannot be wrapped or delayed. Verified, not assumed. A
+  # `command: ["bash","-c","...wait for postgres...; exec mattermost"]` entry passed
+  # `instruqt track validate`, pushed, and had no effect: the server still started
+  # immediately and still died with "cannot create store".
+  #
+  # `cmd:` and `entrypoint:` are NOT ruled out by that result. `command:` is
+  # docker-compose's key name, and Instruqt's own host documentation lists Entrypoint and
+  # Cmd as container settings. Its published config.yml schema lists neither, but that
+  # schema also omits `ports:` and `environment:`, which this stanza uses and which plainly
+  # work, so absence from the reference proves nothing.
+  #
+  # This matters because Mattermost CAN lose a DNS race with its database. The container
+  # starts before the sandbox has a record for `a-postgres`, and Mattermost gives the
+  # database about 8 seconds before exiting fatally: DBPingAttempts is 5
+  # (channels/store/sqlstore/store.go) with a 2s DBConnRetrySleep
+  # (public/utils/sql/sql_utils.go), both compile-time constants, and an NXDOMAIN returns
+  # instantly rather than consuming the 10s ping timeout. No setting changes any of that.
+  #
+  # An earlier version of this comment said the race was lost on every single boot. That is
+  # not holding: measured runs have Mattermost up before its setup script even starts, and
+  # that script costs about 5 seconds rather than the two and a half minutes the relaunch
+  # path implies. The relaunch stays because losing the race leaves the server down for the
+  # life of the sandbox, but treat it as insurance and not as a cost worth optimising. If it
+  # ever needs a real fix, it is `cmd:` above, or an image whose entrypoint waits.
+  ports:
+  - 8065
+  environment:
+    MM_SQLSETTINGS_DRIVERNAME: postgres
+    MM_SQLSETTINGS_DATASOURCE: "postgres://mmuser:mmuser_password@a-postgres:5432/mattermost?sslmode=disable&connect_timeout=10"
+    MM_SERVICESETTINGS_SITEURL: http://mattermost:8065
+
+    # Required. See constraint 2 above.
+    MM_PLUGINSETTINGS_DIRECTORY: /mattermost/plugins
+    MM_PLUGINSETTINGS_CLIENTDIRECTORY: /mattermost/client/plugins
+    MM_PLUGINSETTINGS_ENABLE: "true"
+    MM_PLUGINSETTINGS_ENABLEUPLOADS: "true"
+
+    # Mattermost calls labsvc on the VM, which resolves to a private address. Without
+    # this it refuses the connection and every integration in the track fails silently.
+    MM_SERVICESETTINGS_ALLOWEDUNTRUSTEDINTERNALCONNECTIONS: "workbench localhost 127.0.0.1"
+
+    # Required for the WebSocket to connect, which is what makes the client feel alive:
+    # without it every channel needs a manual refresh and a red "Mattermost unreachable,
+    # ask your administrator to check WebSocket port" banner sits across the top.
+    #
+    # Mattermost origin-checks the WebSocket upgrade (and only the upgrade, which is why
+    # the REST API works and the channel list renders normally). The default checker
+    # compares the browser's Origin host AND scheme against SiteURL
+    # (channels/app/server.go OriginChecker). SiteURL here is the internal
+    # http://mattermost:8065, while the learner's browser arrives from
+    # https://<generated>.env.play.instruqt.com, so both halves mismatch.
+    #
+    # "*" is checked before SiteURL is consulted at all (channels/utils/api.go
+    # CheckOrigin), so it works without knowing the per-participant hostname Instruqt
+    # generates. Setting SiteURL to that hostname would be the tighter fix, but it is only
+    # knowable at runtime, and this is a single-participant sandbox that is destroyed at
+    # the end of the session.
+    MM_SERVICESETTINGS_ALLOWCORSFROM: "*"
+
+    # Makes the curriculum's "5-second timeout" lesson in Module 4 literally true. The
+    # default is far longer.
+    MM_SERVICESETTINGS_OUTGOINGINTEGRATIONREQUESTSTIMEOUT: "5"
+
+    MM_SERVICESETTINGS_ENABLEINCOMINGWEBHOOKS: "true"
+    MM_SERVICESETTINGS_ENABLEOUTGOINGWEBHOOKS: "true"
+    MM_SERVICESETTINGS_ENABLECOMMANDS: "true"
+    MM_SERVICESETTINGS_ENABLEPOSTUSERNAMEOVERRIDE: "true"
+    MM_SERVICESETTINGS_ENABLEPOSTICONOVERRIDE: "true"
+
+    # lab-seed creates bot accounts and personal access tokens. Both are off by default,
+    # and both fail with a permissions error rather than anything descriptive.
+    MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION: "true"
+    MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS: "true"
+
+virtualmachines:
+- name: workbench
+  # Docker is no longer needed here now that Mattermost and Postgres are containers, so a
+  # stock Ubuntu base is enough. Verified to boot and run lifecycle scripts.
+  #
+  # TODO: bake a custom image. `setup-workbench` prints a phase breakdown, and the measured
+  # answer is that this is CPU bound: compiling the Module 6 plugin's dependency tree and
+  # running its webpack build dominate, on two vCPU. The Go MODULE cache is nearly free to
+  # rebuild (a few seconds for 251 MB, so neither network nor disk is the constraint); the
+  # Go BUILD cache is what costs, and it is the thing worth baking, along with the apt
+  # packages, Node, code-server and the webapp node_modules.
+  #
+  # Hot start is ruled out on cost: you are billed for pre-warmed sandboxes nobody claims.
+  #
+  # Instruqt Host images are built in the web UI from a preset base, with a configurable
+  # disk size, and need neither a GCP project nor Packer, so this is cheaper than it looks.
+  image: ubuntu-os-cloud/ubuntu-2204-lts
+  shell: /bin/bash
+  machine_type: n1-standard-2
+  ports:
+  # labsvc: recording proxy, mock services, grader, inspector
+  - 4000
+  # the learner's handler
+  - 3000
+  # code-server
+  - 8080

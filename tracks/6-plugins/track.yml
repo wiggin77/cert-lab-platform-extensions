@@ -1,0 +1,36 @@
+slug: platform-extensions-6-plugins
+id: 4p4rwpcrmmeb
+title: Platform Extensions 6 - Plugins
+teaser: Move inside the server with a Go plugin, its own HTTP API, and a custom interface.
+description: |-
+  Everything so far has worked from outside Mattermost, reacting to it over HTTP. A
+  plugin runs inside the server, and can do things no integration can.
+
+  Two challenges. First the server side: a Go plugin that captures alerts into the KV
+  Store through a hook and exposes them over its own HTTP API, including an AI
+  assessment through the Agents plugin. Then the webapp side: a custom post card that
+  replaces alert rendering entirely, a sidebar pane, and a channel header widget.
+
+  **Prerequisite: Platform Extensions 5.** Modules 2 to 5 arrive already working. This
+  is the longest lab and the only one that involves Go.
+icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
+tags:
+- integrations
+- webhooks
+- mattermost
+- plugins
+- certification
+owner: mattermost
+developers:
+- eric@mattermost.com
+- doug.lauder@mattermost.com
+idle_timeout: 900
+timelimit: 4500
+lab_config:
+  sidebar_enabled: true
+  feedback_recap_enabled: true
+  feedback_tab_enabled: false
+  loadingMessages: true
+  hideStopButton: false
+checksum: "15947563847025315819"
+enhanced_loading: false

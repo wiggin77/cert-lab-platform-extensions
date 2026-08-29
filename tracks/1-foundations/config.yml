@@ -1,0 +1,12 @@
+version: "3"
+
+# No hosts. This track is theory only, so it provisions nothing and loads instantly.
+#
+# Verified rather than assumed: a track with no `containers:` and no `virtualmachines:`
+# passes all five stages of `instruqt track validate`. That is the whole reason Module 1
+# can have a track of its own without costing a learner a six minute wait for a sandbox
+# they would never open.
+#
+# If this track ever gains a challenge that needs a host, copy the sandbox definition from
+# tracks/2-incoming-webhooks/config.yml rather than writing a new one, and add this track
+# to bin/check-track-drift.

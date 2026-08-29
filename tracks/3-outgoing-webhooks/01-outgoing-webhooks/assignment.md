@@ -1,0 +1,121 @@
+---
+slug: outgoing-webhooks
+id: vyjbdmhtb7u4
+type: challenge
+title: Outgoing Webhooks
+teaser: Auto-escalate CRITICAL alerts to the incident channel with no analyst action.
+notes:
+- type: text
+  contents: |-
+    Alerts are landing in ~alerts and they look right. Nobody is watching that
+    channel at 3am.
+
+    A CRITICAL alert needs to reach the on-call team without waiting for an analyst
+    to notice it. That means Mattermost has to call you when something matches, not
+    the other way round.
+
+    This challenge wires an outgoing webhook and writes the handler that escalates.
+- type: text
+  contents: |-
+    **Module 2 is already done in this environment.** The incoming webhook is
+    configured and `src/payloads/alert-payload.ts` already formats alerts as
+    attachments, so alerts are arriving in `~alerts` before you write a line. That
+    is the starting point for this lab, not something you need to reproduce.
+tabs:
+- id: 0por1fxjrit8
+  title: Mattermost
+  type: service
+  hostname: mattermost
+  port: 8065
+- id: s23qlbm5314y
+  title: Editor
+  type: service
+  hostname: workbench
+  path: /?folder=/home/learner/handler
+  port: 8080
+- id: jldefoxbfvce
+  title: Lab Inspector
+  type: service
+  hostname: workbench
+  path: /inspector
+  port: 4000
+- id: yanb2kn2oyfs
+  title: Terminal
+  type: terminal
+  hostname: workbench
+difficulty: intermediate
+timelimit: 2400
+enhanced_loading: null
+---
+
+An incoming webhook pushes data in. An outgoing webhook is the reverse: Mattermost calls
+your endpoint when a message matches a trigger word you configure.
+
+# Your task
+
+## 1. Create the outgoing webhook
+
+**Integrations > Outgoing Webhooks > Add Outgoing Webhook**:
+
+| Field | Value |
+|---|---|
+| Content Type | `application/x-www-form-urlencoded` |
+| Channel | `~alerts` |
+| Trigger Words | `CRITICAL` |
+| Callback URLs | `http://workbench:4000/hooks/outgoing` |
+
+Then copy the **token** it shows you, switch to the **Terminal** tab, and register it:
+
+```bash
+sudo lab-set-token outgoing '<paste the token here>'
+```
+
+## 2. Handle the callback
+
+Edit `src/routes/outgoing-webhook.ts`:
+
+1. **Reject** any request whose token does not match. Use `isValidToken()` from
+   `src/lib/verify.ts`, not `===`.
+2. **Fetch** the triggering post with `getPost(payload.post_id)` and pull the alert
+   fields out with `parseAlertFromProps()`. The structured values live in the
+   attachment, not in `payload.text`.
+3. **Post** an escalation to `~incidents` carrying the alert source, indicator,
+   severity, and a `permalink()` back to the original message.
+
+The helpers come from three modules, and you have to import them yourself:
+
+```ts
+import {parseAlertFromProps} from '../lib/alert.js'
+import {createPost, getPost, permalink} from '../lib/mattermost.js'
+import {isValidToken} from '../lib/verify.js'
+```
+
+The `.js` extension is correct even in a `.ts` file: that is how ES modules resolve on
+Node. Note also that the **Editor** tab cannot autocomplete these, and its red underlines
+do not reflect the real build, so `npm run typecheck` in `/home/learner/handler` is the
+authority on whether your code compiles.
+
+## 3. Test it
+
+Back in the **Terminal** tab:
+
+```bash
+fire-alert.sh --severity CRITICAL
+```
+
+# Worth knowing
+
+**The callback URL must be `workbench`, not `localhost` and not the browser address bar
+URL.** Mattermost calls it from the server process, so it needs an address that resolves
+there.
+
+**The trigger word matches at the start of a message**, not anywhere inside it. This
+surprises people.
+
+**There is no signature to verify.** Mattermost sends a plaintext shared token in the
+request body. That token is the entire security model for this surface, which is why
+comparing it in constant time matters: a plain `===` returns as soon as it hits a
+differing byte, and how long that takes leaks how much of the token an attacker guessed.
+
+**Threads cannot span channels.** Your escalation lives in `~incidents` and the alert
+lives in `~alerts`, so a reply cannot join them. A permalink is how you point across.

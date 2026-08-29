@@ -1,0 +1,34 @@
+slug: platform-extensions-3-outgoing-webhooks
+id: t7x5djkuemts
+title: Platform Extensions 3 - Outgoing Webhooks
+teaser: React to alerts as they arrive, and auto-escalate the critical ones.
+description: |-
+  Alerts are arriving and are readable, but nothing acts on them. An analyst still
+  has to notice a CRITICAL one and carry it to the incident channel by hand.
+
+  In this lab you configure an outgoing webhook and verify its token, so your handler
+  can react to alerts as they are posted and escalate the critical ones automatically.
+
+  **Prerequisite: Platform Extensions 2.** Module 2's incoming webhook and alert
+  formatting arrive already working, so you can start here without having taken it.
+icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
+tags:
+- integrations
+- webhooks
+- mattermost
+- plugins
+- certification
+owner: mattermost
+developers:
+- eric@mattermost.com
+- doug.lauder@mattermost.com
+idle_timeout: 900
+timelimit: 3300
+lab_config:
+  sidebar_enabled: true
+  feedback_recap_enabled: true
+  feedback_tab_enabled: false
+  loadingMessages: true
+  hideStopButton: false
+checksum: "16621975056963186193"
+enhanced_loading: false

@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# Reports when the five sandbox tracks' shared files stop agreeing.
+#
+#   bin/check-track-drift          check, print, exit non-zero on drift
+#   bin/check-track-drift --fix    copy tracks/2-* over the others, then check
+#
+# WHY THIS EXISTS INSTEAD OF A GENERATOR. The six tracks were split out of one, and four
+# files are identical in all five that have a sandbox. A generator would prevent drift, but
+# it would also silently revert anyone's hand edit and put a build step between "edit the
+# setup script" and "push the track". Every track directory here is instead a plain,
+# complete, editable track, and this script is what makes that survivable: a shared fix has
+# to land five times, and this tells you when it landed four.
+#
+# The failure it guards is quiet. A stale setup-mattermost in one track shows up as one
+# track behaving differently, weeks later, with nothing pointing at the cause. Run this
+# before pushing, not after.
+#
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+TRACKS_DIR="${HERE}/tracks"
+
+# Track 1 has no sandbox and no track_scripts, so it shares nothing and is not checked.
+TRACKS=(2-incoming-webhooks 3-outgoing-webhooks 4-slash-commands 5-actions-and-dialogs 6-plugins)
+REFERENCE=2-incoming-webhooks
+
+SHARED=(
+    config.yml
+    track_scripts/setup-a-postgres
+    track_scripts/setup-mattermost
+    track_scripts/cleanup-workbench
+)
+
+# setup-workbench is the one shared file with legitimate per-track variation, held to
+# exactly two variables at the top of the file. Normalising those two lines out is what
+# lets the rest of it be compared like everything else. If a third variable ever appears
+# here, that is the signal that copying has stopped paying: see the implementation plan.
+VARIABLE_LINES='^(LAB_TRACK|NEEDS_PLUGIN_TOOLCHAIN)='
+
+FIX=false
+[ "${1:-}" = "--fix" ] && FIX=true
+
+fail=0
+
+normalise() {
+    sed -E "s/${VARIABLE_LINES}.*/\\1=<per-track>/" "$1"
+}
+
+digest() {
+    if [ "$2" = setup-workbench ]; then
+        normalise "$1" | md5sum | cut -d' ' -f1
+    else
+        md5sum < "$1" | cut -d' ' -f1
+    fi
+}
+
+check_file() {
+    local rel="$1" base ref_digest d t
+    base="$(basename "$rel")"
+    ref_digest="$(digest "${TRACKS_DIR}/${REFERENCE}/${rel}" "$base")"
+    local disagree=()
+    for t in "${TRACKS[@]}"; do
+        [ "$t" = "$REFERENCE" ] && continue
+        if [ ! -f "${TRACKS_DIR}/${t}/${rel}" ]; then
+            disagree+=("${t} (missing)")
+            continue
+        fi
+        d="$(digest "${TRACKS_DIR}/${t}/${rel}" "$base")"
+        [ "$d" = "$ref_digest" ] || disagree+=("$t")
+    done
+
+    if [ "${#disagree[@]}" -eq 0 ]; then
+        printf '  OK    %s\n' "$rel"
+        return 0
+    fi
+
+    printf '  DRIFT %s\n' "$rel"
+    for t in "${disagree[@]}"; do
+        printf '          differs from %s: %s\n' "$REFERENCE" "$t"
+    done
+    return 1
+}
+
+if [ "$FIX" = true ]; then
+    echo "copying shared files from ${REFERENCE} to the other four tracks"
+    for rel in "${SHARED[@]}"; do
+        for t in "${TRACKS[@]}"; do
+            [ "$t" = "$REFERENCE" ] && continue
+            mkdir -p "$(dirname "${TRACKS_DIR}/${t}/${rel}")"
+            cp "${TRACKS_DIR}/${REFERENCE}/${rel}" "${TRACKS_DIR}/${t}/${rel}"
+        done
+    done
+    # setup-workbench is deliberately NOT copied by --fix. Its two per-track variables would
+    # be overwritten with track 2's values, which is a silent way to give every track the
+    # wrong module number. Fix that one by hand.
+    echo "note: setup-workbench is not copied, its two variables are per-track. Edit by hand."
+    echo
+fi
+
+echo "checking shared files across ${#TRACKS[@]} sandbox tracks (reference: ${REFERENCE})"
+for rel in "${SHARED[@]}"; do
+    check_file "$rel" || fail=1
+done
+check_file track_scripts/setup-workbench || fail=1
+
+echo
+echo "per-track variables:"
+for t in "${TRACKS[@]}"; do
+    f="${TRACKS_DIR}/${t}/track_scripts/setup-workbench"
+    printf '  %-24s %s  %s\n' "$t" \
+        "$(grep -m1 '^LAB_TRACK=' "$f" 2>/dev/null || echo 'LAB_TRACK=?')" \
+        "$(grep -m1 '^NEEDS_PLUGIN_TOOLCHAIN=' "$f" 2>/dev/null || echo 'NEEDS_PLUGIN_TOOLCHAIN=?')"
+done
+
+# The number in LAB_TRACK has to match the directory it sits in, or the track seeds and
+# grades as a different module than its title claims. Nothing else would catch that.
+echo
+for t in "${TRACKS[@]}"; do
+    want="${t%%-*}"
+    got="$(grep -m1 '^LAB_TRACK=' "${TRACKS_DIR}/${t}/track_scripts/setup-workbench" 2>/dev/null | cut -d= -f2)"
+    if [ "$want" != "$got" ]; then
+        echo "  MISMATCH ${t}: LAB_TRACK=${got}, expected ${want}"
+        fail=1
+    fi
+done
+
+if [ "$fail" -eq 0 ]; then
+    echo "no drift"
+else
+    echo "DRIFT FOUND. Reconcile before pushing." >&2
+fi
+exit "$fail"

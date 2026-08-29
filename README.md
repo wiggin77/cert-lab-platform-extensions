@@ -1,20 +1,24 @@
 # Mattermost Platform Extensions certification lab
 
 Hands-on labs for the **Platform Extension Expert** certification, hosted on
-[Instruqt](https://instruqt.com). Five labs across six challenges, in which a learner
+[Instruqt](https://instruqt.com). Six tracks, one per curriculum module, in which a learner
 builds a working Mattermost integration one surface at a time against a simulated threat
 intelligence feed.
 
 Each module adds a capability the previous one could not provide:
 
-| Challenge | Surface | What the learner builds |
+| Track | Surface | What the learner builds |
 | --- | --- | --- |
-| 1 | Incoming webhooks | Alerts arrive in `~alerts` as formatted message attachments |
-| 2 | Outgoing webhooks | CRITICAL alerts auto-escalate to `~incidents` |
-| 3 | Slash commands | `/threat <indicator>` returns threat intel enrichment |
-| 4 | Post actions and dialogs | An Escalate button opens a form and posts an assessment |
-| 5 | Plugins, server | A Go hook captures alerts into the KV Store, exposed over HTTP |
-| 6 | Plugins, webapp | A custom post card, sidebar pane, AI skills, and a header widget |
+| 1 | Foundations | Theory. No sandbox. Placeholder content for now |
+| 2 | Incoming webhooks | Alerts arrive in `~alerts` as formatted message attachments |
+| 3 | Outgoing webhooks | CRITICAL alerts auto-escalate to `~incidents` |
+| 4 | Slash commands | `/threat <indicator>` returns threat intel enrichment |
+| 5 | Post actions and dialogs | An Escalate button opens a form and posts an assessment |
+| 6 | Plugins | A Go hook and HTTP API, then a custom post card, sidebar and header widget |
+
+Each track is its own Instruqt track with its own sandbox, and arrives with the earlier
+modules' work already in place, so they can be taken in order without carrying state
+between them.
 
 Learners are graded by firing a real alert and inspecting what Mattermost actually did
 with it, never by reading their source.
@@ -26,11 +30,11 @@ with it, never by reading their source.
 | [`labsvc/`](labsvc/) | Lab infrastructure: recording proxy, mock services, grader, inspector |
 | [`handler/`](handler/) | The learner's integration handler, challenges 1 to 4 |
 | [`bin/`](bin/) | Provisioning and helper scripts run on the sandbox host |
-| [`track/`](track/) | Instruqt track configuration: hosts, assignments, lifecycle scripts |
+| [`tracks/`](tracks/) | Six Instruqt tracks, one per curriculum module: hosts, assignments, lifecycle scripts |
 | [`variants/`](variants/) | Worked solutions, applied by the platform's solve scripts |
 | [`DESIGN.md`](DESIGN.md) | Architecture and the reasoning behind it. Read this first. |
 
-Each of `labsvc/`, `handler/`, and `track/` has its own README covering local use.
+Each of `labsvc/`, `handler/`, and `tracks/` has its own README covering local use.
 
 ## How it fits together
 
@@ -85,22 +89,32 @@ Use `npm run typecheck`, not `npx tsc`, which installs an unrelated package call
 The mocks, proxies, and inspector work standalone. Grading needs a seeded Mattermost and
 returns 503 without `MM_ADMIN_TOKEN`. See `.env.example` in each package.
 
-## Working on the track
+## Working on the tracks
+
+Six tracks, one per curriculum module, each a complete independent track under `tracks/`.
+The track number, the curriculum module number, `LAB_MODULE`, and the grader's module
+argument are all the same number.
 
 ```bash
-cd track
+cd tracks/4-slash-commands
 instruqt track validate     # check the configuration
 instruqt track push         # deploy config, assignments, lifecycle scripts
 instruqt track test         # run the whole track: setup, check, solve, check
-instruqt track logs         # tail lifecycle script output
+```
+
+Four files are plain copies shared across the five sandbox tracks, so a shared fix has to
+land five times. Check before pushing:
+
+```bash
+bin/check-track-drift       # exits non-zero on drift
 ```
 
 **Code and track config deploy separately**, which is easy to trip over: you can push a
 track and see none of your code changes.
 
 ```bash
-git push                          # labsvc, handler, bin, variants  (cloned at setup)
-cd track && instruqt track push   # config, assignments, lifecycle scripts
+git push                                             # labsvc, handler, bin, variants
+cd tracks/4-slash-commands && instruqt track push    # config, assignments, lifecycle scripts
 ```
 
 Track setup clones this repository to `/opt/lab` on the sandbox. Point a run at a branch

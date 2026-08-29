@@ -1,0 +1,35 @@
+slug: platform-extensions-1-foundations
+id: xwhpa1wsk3z0
+title: Platform Extensions 1 - Foundations
+teaser: Orientation for the Platform Extension Expert certification labs. Start here.
+description: |-
+  PLACEHOLDER. The theory content for Module 1 has not been written yet.
+
+  This track exists so the learning path is numbered from 1 and so the five hands-on
+  labs that follow have somewhere to point back to. It provisions no sandbox and
+  loads instantly.
+
+  Take the tracks in order. Each one starts with the previous modules' work already
+  in place, so you can begin a later lab without having finished an earlier one, but
+  the concepts do build.
+icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
+tags:
+- integrations
+- webhooks
+- mattermost
+- plugins
+- certification
+owner: mattermost
+developers:
+- eric@mattermost.com
+- doug.lauder@mattermost.com
+idle_timeout: 900
+timelimit: 1500
+lab_config:
+  sidebar_enabled: true
+  feedback_recap_enabled: true
+  feedback_tab_enabled: false
+  loadingMessages: true
+  hideStopButton: false
+checksum: "10047431886469386258"
+enhanced_loading: false

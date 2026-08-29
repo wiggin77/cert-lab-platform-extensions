@@ -1,0 +1,35 @@
+slug: platform-extensions-5-actions-and-dialogs
+id: zswhqwhpdxhk
+title: Platform Extensions 5 - Post Actions and Dialogs
+teaser: Put a button on an alert, open a form, and capture an analyst's judgement.
+description: |-
+  Automatic escalation catches CRITICAL alerts, but it carries no human judgement:
+  nothing records why an alert matters, what the analyst checked, or what they ruled
+  out.
+
+  In this lab you add an Escalate button to the alert itself, open a dialog when it is
+  clicked, and post the analyst's assessment back into the incident channel.
+
+  **Prerequisite: Platform Extensions 4.** Modules 2 to 4 arrive already working, so
+  you can start here without having taken them.
+icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
+tags:
+- integrations
+- webhooks
+- mattermost
+- plugins
+- certification
+owner: mattermost
+developers:
+- eric@mattermost.com
+- doug.lauder@mattermost.com
+idle_timeout: 900
+timelimit: 3600
+lab_config:
+  sidebar_enabled: true
+  feedback_recap_enabled: true
+  feedback_tab_enabled: false
+  loadingMessages: true
+  hideStopButton: false
+checksum: "13409879239241290532"
+enhanced_loading: false

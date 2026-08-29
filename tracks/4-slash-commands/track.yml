@@ -1,0 +1,35 @@
+slug: platform-extensions-4-slash-commands
+id: snokktdayx5i
+title: Platform Extensions 4 - Slash Commands
+teaser: Give analysts a command that enriches an indicator on demand.
+description: |-
+  Everything so far has been automatic. This is the first surface an analyst drives
+  themselves: they see an indicator and want to know what is already known about it
+  before deciding how to respond.
+
+  In this lab you register a slash command and answer it inside Mattermost's timeout,
+  which is the constraint that shapes the whole design.
+
+  **Prerequisite: Platform Extensions 3.** Modules 2 and 3 arrive already working, so
+  you can start here without having taken them.
+icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
+tags:
+- integrations
+- webhooks
+- mattermost
+- plugins
+- certification
+owner: mattermost
+developers:
+- eric@mattermost.com
+- doug.lauder@mattermost.com
+idle_timeout: 900
+timelimit: 3300
+lab_config:
+  sidebar_enabled: true
+  feedback_recap_enabled: true
+  feedback_tab_enabled: false
+  loadingMessages: true
+  hideStopButton: false
+checksum: "15351286020997698561"
+enhanced_loading: false

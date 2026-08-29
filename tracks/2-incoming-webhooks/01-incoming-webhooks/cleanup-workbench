@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#
+# Resets lab state to the snapshot taken at the start of this challenge.
+#
+# Learners experiment. Without this, a later challenge's checks trip over posts and
+# integrations left behind by an earlier one.
+#
+set -uo pipefail
+curl -sf -m 30 -X POST http://localhost:4000/admin/reset >/dev/null 2>&1 || true
+exit 0

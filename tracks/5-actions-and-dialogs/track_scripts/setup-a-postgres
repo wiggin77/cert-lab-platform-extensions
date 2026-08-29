@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# Runs inside the Postgres container. Diagnostics only, never fails the track.
+#
+# Mattermost exits during startup if it cannot reach its database, so confirming Postgres
+# is actually serving rules out the most likely cause before anyone starts reading
+# Mattermost config for a parse error.
+#
+set -uo pipefail
+
+say() { echo "[pg] $*"; }
+
+say "script is running, hostname=$(hostname 2>/dev/null || echo '?')"
+say "POSTGRES_ env var count: $(env 2>/dev/null | grep -c '^POSTGRES_' || echo 0)"
+
+ready=no
+for _ in $(seq 1 45); do
+    if pg_isready -q -h localhost -U "${POSTGRES_USER:-postgres}" 2>/dev/null; then
+        ready=yes
+        break
+    fi
+    sleep 2
+done
+say "pg_isready after 90s: ${ready}"
+
+say "port 5432 listening: $(timeout 3 bash -c 'echo > /dev/tcp/localhost/5432' 2>/dev/null && echo yes || echo NO)"
+
+exit 0

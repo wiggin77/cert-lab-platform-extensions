@@ -1,0 +1,37 @@
+slug: platform-extensions-2-incoming-webhooks
+id: tvtriyxvprmn
+title: Platform Extensions 2 - Incoming Webhooks
+teaser: Get a simulated threat feed posting formatted alerts into a Mattermost channel.
+description: |-
+  A simulated cyber threat intelligence feed needs to post alerts into Mattermost.
+  Right now it has nowhere to send them, and nothing formats them.
+
+  In this lab you create an incoming webhook and write the payload that turns a raw
+  alert into a message attachment an analyst can triage at a glance.
+
+  **This is the first hands-on lab.** You start from an empty handler.
+
+  Your work is checked by firing a real alert and inspecting what Mattermost actually
+  did with it, never by reading your source. A Lab Inspector tab shows every request
+  in both directions, live.
+icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
+tags:
+- integrations
+- webhooks
+- mattermost
+- plugins
+- certification
+owner: mattermost
+developers:
+- eric@mattermost.com
+- doug.lauder@mattermost.com
+idle_timeout: 900
+timelimit: 3300
+lab_config:
+  sidebar_enabled: true
+  feedback_recap_enabled: true
+  feedback_tab_enabled: false
+  loadingMessages: true
+  hideStopButton: false
+checksum: "1988366737281543221"
+enhanced_loading: false
