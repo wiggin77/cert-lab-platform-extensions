@@ -19,7 +19,6 @@ Two npm packages, no monorepo tooling. Install and run them independently.
 | `handler/` | The learner's integration handler, modules 2 to 5. Ships to `/home/learner/handler`. |
 | `variants/` | Per-module solution overlays plus `apply-variant.sh`. |
 | `tracks/` | Six Instruqt tracks, one per curriculum module. See `tracks/README.md`. |
-| `track/` | **Frozen.** The pre-split single track, kept as the rollback. Do not edit. |
 
 ## Commands
 
@@ -237,7 +236,7 @@ instruqt track open         # open it in a browser
 six under `tracks/`. `logs` takes a slug and works from anywhere:
 
 ```bash
-timeout 60 instruqt track logs platform-extensions --since 20m
+timeout 60 instruqt track logs platform-extensions-4-slash-commands --since 20m
 ```
 
 **`instruqt track logs` tails forever and never exits.** Always wrap it in `timeout`, or

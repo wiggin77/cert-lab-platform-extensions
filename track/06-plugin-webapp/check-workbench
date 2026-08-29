@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-#
-# Runs the grader for module 6, challenge 2.
-#
-# Each check fires its own stimulus, so this is safe to re-run as often as the learner
-# likes. Stdout becomes the failure message Instruqt shows them.
-#
-exec /opt/lab/labsvc/scripts/check-challenge.sh 6 2

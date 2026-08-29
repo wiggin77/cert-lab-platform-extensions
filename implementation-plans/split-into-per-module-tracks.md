@@ -1,7 +1,9 @@
 # Splitting the track into per-module tracks
 
-Status: W1 to W6 done. All six tracks are pushed, and all five sandbox tracks pass
-`instruqt track test` end to end (2026-08-29). Only W7, retiring the old track, remains.
+Status: DONE, 2026-08-29. All six tracks are pushed, all five sandbox tracks pass
+`instruqt track test` end to end, and the old `platform-extensions` track has been deleted
+from Instruqt along with the local `track/` directory. Kept for the reasoning, not as a
+live plan.
 Supersedes: nothing. Blocks: the custom VM image (see "Why this comes first")
 
 ## Goal
