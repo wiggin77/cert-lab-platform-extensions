@@ -186,6 +186,13 @@ containers:
     MM_SERVICESETTINGS_ENABLEBOTACCOUNTCREATION: "true"
     MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS: "true"
 
+    # Suppress the "open in the Desktop App or continue in browser" interstitial. It
+    # defaults on (ServiceSettings.EnableDesktopLandingPage, server/public/model/config.go:487,
+    # defaulted true at :952), and in a lab it is pure friction: the learner is already in a
+    # browser tab inside Instruqt, there is no desktop app on the sandbox, and the choice
+    # costs a click before every Mattermost tab becomes usable.
+    MM_SERVICESETTINGS_ENABLEDESKTOPLANDINGPAGE: "false"
+
 virtualmachines:
 - name: workbench
   # Docker is no longer needed here now that Mattermost and Postgres are containers, so a
