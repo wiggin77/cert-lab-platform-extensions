@@ -104,3 +104,14 @@ where the failure is invisible from the Mattermost side until it is too late.
 
 **`response_url` is short lived** but needs no bot token, which is what makes it useful
 for a delayed reply.
+
+---
+
+## Next
+
+**[Platform Extensions 5 - Post Actions and Dialogs](https://play.instruqt.com/mattermost/tracks/platform-extensions-5-actions-and-dialogs)**
+
+Put a button on an alert, open a form, and capture an analyst's judgement.
+
+Your work from this module is already in place when that lab starts, so you can
+pick it up straight away.

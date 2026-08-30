@@ -125,3 +125,14 @@ produces validation that silently never shows.
 
 **Returning a non-2xx loses everything the analyst typed.** Return 200 with `errors`
 instead.
+
+---
+
+## Next
+
+**[Platform Extensions 6 - Plugins](https://play.instruqt.com/mattermost/tracks/platform-extensions-6-plugins)**
+
+Move inside the server with a Go plugin, its own HTTP API, and a custom interface.
+
+Your work from this module is already in place when that lab starts, so you can
+pick it up straight away.

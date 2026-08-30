@@ -130,3 +130,14 @@ notifications are blank, which is worse than useless to someone on call.
 The attachment format you write here is the same one used by outgoing webhook responses,
 slash command responses, and REST posts. You learn it once and reuse it for the rest of
 the track.
+
+---
+
+## Next
+
+**[Platform Extensions 3 - Outgoing Webhooks](https://play.instruqt.com/mattermost/tracks/platform-extensions-3-outgoing-webhooks)**
+
+React to alerts as they arrive, and auto-escalate the critical ones.
+
+Your work from this module is already in place when that lab starts, so you can
+pick it up straight away.

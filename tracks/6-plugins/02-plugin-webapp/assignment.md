@@ -108,3 +108,14 @@ under `plugins-<your plugin id>`.
 picks its response from cues in the text, so asking an "analyse" question with words like
 fix, respond, or next steps returns remediation advice instead. Real models are less
 literal about this but not immune to it.
+
+---
+
+## Next
+
+**That is the last lab.** You have built against every Mattermost extension surface the
+certification covers: incoming webhooks, outgoing webhooks, slash commands, interactive
+actions and dialogs, and a plugin with both a server and a webapp side.
+
+The labs are practice. The certification exam is the assessment, and it is delivered
+separately from these labs.

@@ -119,3 +119,14 @@ differing byte, and how long that takes leaks how much of the token an attacker 
 
 **Threads cannot span channels.** Your escalation lives in `~incidents` and the alert
 lives in `~alerts`, so a reply cannot join them. A permalink is how you point across.
+
+---
+
+## Next
+
+**[Platform Extensions 4 - Slash Commands](https://play.instruqt.com/mattermost/tracks/platform-extensions-4-slash-commands)**
+
+Give analysts a command that enriches an indicator on demand.
+
+Your work from this module is already in place when that lab starts, so you can
+pick it up straight away.

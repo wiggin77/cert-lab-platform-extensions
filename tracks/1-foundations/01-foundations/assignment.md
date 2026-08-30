@@ -107,4 +107,11 @@ mock feed, your handler, and an editor already running.
 
 ---
 
-*Continue to **Platform Extensions 2: Incoming Webhooks**.*
+## Next
+
+**[Platform Extensions 2 - Incoming Webhooks](https://play.instruqt.com/mattermost/tracks/platform-extensions-2-incoming-webhooks)**
+
+Get a simulated threat feed posting formatted alerts into a Mattermost channel.
+
+That is the first hands-on lab. It provisions its own environment, so there is nothing
+to set up before you begin.
