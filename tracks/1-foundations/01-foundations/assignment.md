@@ -7,10 +7,10 @@ teaser: Orientation for the Platform Extension Expert labs.
 notes:
 - type: text
   contents: |-
-    PLACEHOLDER CONTENT. Module 1's theory has not been written yet.
+    A simulated cyber threat intelligence feed needs to post alerts into Mattermost.
 
-    This screen exists so the learning path is numbered from 1 and so the five
-    hands-on labs that follow have somewhere to point back to.
+    Over the five labs that follow you build the integration that receives them, and
+    keep extending it until it can escalate, enrich, and render them.
 difficulty: basic
 timelimit: 600
 enhanced_loading: null
@@ -18,9 +18,23 @@ enhanced_loading: null
 
 # Foundations
 
-> **PLACEHOLDER.** This track is a stub. Module 1's theory content is still to be
-> written, and this file should be replaced wholesale when it is. Nothing below is
-> finished copy.
+## The scenario
+
+A simulated cyber threat intelligence feed needs to post alerts into Mattermost.
+
+Right now it has nowhere to send them, and nothing formats them. Alerts either arrive
+as an unreadable line of plain text, or not at all.
+
+Across the five labs that follow you build the integration that fixes that, one
+Mattermost extension surface at a time. Each module adds a capability the previous one
+could not provide, against the same running scenario: by the end, a CRITICAL alert
+lands formatted in `~alerts`, escalates itself to `~incidents`, can be enriched on
+demand, carries a working Escalate button, and renders through a custom interface you
+wrote in Go.
+
+> **Module 1's theory content is still to be written.** The orientation below is
+> accurate and worth reading, but the conceptual material that belongs in this module
+> is not here yet.
 
 ## The certification path
 

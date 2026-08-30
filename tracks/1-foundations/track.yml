@@ -3,15 +3,18 @@ id: xwhpa1wsk3z0
 title: Platform Extensions 1 - Foundations
 teaser: Orientation for the Platform Extension Expert certification labs. Start here.
 description: |-
-  PLACEHOLDER. The theory content for Module 1 has not been written yet.
+  A simulated cyber threat intelligence feed needs to post alerts into Mattermost.
+  Right now it has nowhere to send them, and nothing formats them.
 
-  This track exists so the learning path is numbered from 1 and so the five hands-on
-  labs that follow have somewhere to point back to. It provisions no sandbox and
-  loads instantly.
+  Start here. This track orients you: the scenario, the five hands-on labs that
+  follow, how they are graded, and what you need before you begin. It provisions no
+  sandbox and loads instantly.
 
   Take the tracks in order. Each one starts with the previous modules' work already
   in place, so you can begin a later lab without having finished an earlier one, but
   the concepts do build.
+
+  Module 1's own theory content is still to be written.
 icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
 tags:
 - integrations
@@ -31,5 +34,5 @@ lab_config:
   feedback_tab_enabled: false
   loadingMessages: true
   hideStopButton: false
-checksum: "10047431886469386258"
+checksum: "13156622100022316452"
 enhanced_loading: false

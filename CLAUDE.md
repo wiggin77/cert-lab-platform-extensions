@@ -186,7 +186,9 @@ the outbound proxy records nothing.
 The six modules are six separate Instruqt tracks under `tracks/`. **The track number is the
 curriculum module number**, and also `LAB_MODULE` and the grader's module argument: track 4
 is module 4, sets `LAB_MODULE=4`, grades with `check-challenge.sh 4 1`. Track 1 is theory,
-has no sandbox, and carries placeholder content. Track 6 is the only one with two challenges
+has no sandbox, and carries the scenario framing and orientation; only its conceptual
+module content is still unwritten. It loads instantly, so anything the learner must read
+belongs in its assignment body, not its notes. Track 6 is the only one with two challenges
 and the only one that touches Go.
 
 Three things follow, and all three are load bearing:
