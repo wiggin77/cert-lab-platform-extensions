@@ -1,7 +1,11 @@
 # Baking a custom workbench VM image
 
-Status: researched, not started. The platform mechanics below are now sourced from Instruqt's
+Status: W1 done, image not built. The platform mechanics below are sourced from Instruqt's
 docs rather than assumed; see "Sources". What remains unverified is called out explicitly.
+
+The remaining blocker is that W2 is a browser flow. `image/provision.sh` is written and the
+version drift check covers it, so building the image is now a paste-and-save in the Instruqt
+UI rather than a design question.
 
 Depends on: the per-module track split, which is done. Read
 `implementation-plans/split-into-per-module-tracks.md` first, since the split is what
@@ -44,6 +48,22 @@ REPO INDEPENDENT, safe to bake          REPO DEPENDENT or per-run
 
 **82 of 112 seconds is fetching and unpacking things that only change when someone
 deliberately bumps a version.**
+
+A second run, 2026-08-30, participant `nrpszjrjvp5r`, launched from the UI rather than by
+`instruqt track test`:
+
+```
+ 2s   setup-a-postgres
+ 3s   setup-mattermost
+82s   setup-workbench
+ 4s   challenge setup          ~107s of scripts, ~2m13s including terraform
+```
+
+with `setup-workbench` splitting 30s apt, 25s Node, 13s code-server, 6s start services, 3s
+npm ci labsvc, 2s seed, 2s npm ci handler, 1s clone. **68 of 82 seconds was the bakeable
+layer, 83%**, against 73% on the 112s run. The bakeable fraction rises as the run gets
+faster, because the repo-dependent remainder is nearly constant at 14s. On that run the image
+would have meant `setup-workbench` in about 14s and the whole thing in about 1m05s.
 
 The spread matters as much as the mean. `apt base packages` has measured 20s, 36s, 45s and
 47s across runs, and `setup-workbench` totals have ranged 71s to 116s for byte-identical
@@ -220,9 +240,9 @@ should be measured before phase 2 is attempted.
 
 ## Work items
 
-### W1. Make `setup-workbench` image-agnostic first
+### W1. Make `setup-workbench` image-agnostic first. DONE
 
-**Do this before building anything.** Every install step becomes verify-then-install:
+Every install step is now verify-then-install:
 
 ```bash
 if have_node "$NODE_MAJOR"; then
@@ -245,14 +265,40 @@ Keep the version variables (`NODE_MAJOR`, `GO_VERSION`) as the source of truth, 
 check compare against them. An image carrying Node 20 when the script wants 22 must install
 22, not accept what it finds.
 
-Acceptance: with no image, every phase runs and totals are unchanged. That is testable
-immediately, before any image exists.
+Four helpers do the checking, at `setup-workbench:137`: `have_pkgs` (all-or-none over
+`dpkg-query`), `have_node` (major version), `have_go` (exact version), and
+`have_code_server` (presence only, since code-server is deliberately unpinned, which means a
+baked one is frozen until the image is rebuilt).
+
+`setup-workbench` also logs `/etc/lab-image-version` on every boot, so a run's log says which
+image it booted, and no marker means the stock base.
+
+Acceptance: with no image, every phase runs and totals are unchanged. **Met**, track 2,
+participant `xmvjtktpcdgm`, 2026-08-30. `instruqt track test` succeeded end to end, the log
+opened with `image: none, stock base image`, every install phase ran (30s apt, 22s Node, 12s
+code-server), and the total was 77s, inside the 71s to 116s band the script had before the
+change. No phase reported a skip, which is the correct result when no image exists.
+
+Note what that does NOT prove. The skip path has never executed, because nothing has yet
+booted with the toolchain preinstalled. W3 is its first real test, and the phase summary is
+built to make it obvious: the three phases should report at or near 0s with a
+`already present, skipping install` line each, rather than vanishing.
+
+**The second source of truth is now checked.** `image/provision.sh` has to name
+`NODE_MAJOR` and `GO_VERSION` again, because it runs in the Instruqt image builder where
+this repo is not checked out. `bin/check-track-drift` compares the two and fails on
+disagreement, which is what stops a version bump from quietly producing a stale image. A
+stale image is otherwise invisible: setup just reinstalls the toolchain and the saving
+disappears with nothing printed.
 
 ### W2. Build the image
 
-Route A. Write `image/provision.sh` in this repo first, then create the Host image from an
-Ubuntu 22.04 base and run that script in the browser terminal. Record the image name and the
-date in this document.
+Route A, and `image/provision.sh` is written. Create the Host image from an Ubuntu 22.04
+base, run that script in the browser terminal (paste it, or curl it from the repo's raw URL,
+which the script's own header gives), Save, then record the image name and date here.
+
+This step needs the Instruqt web UI, so it is the one part of this plan that cannot be driven
+from the CLI.
 
 Give the disk enough room for phase 2 even if phase 2 never happens, since resizing later is
 more disruptive than provisioning generously now, and per the section above the extra space

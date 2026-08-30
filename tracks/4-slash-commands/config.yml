@@ -202,7 +202,7 @@ virtualmachines:
   #
   # Instruqt Host images are built in the web UI from a preset base, with a configurable
   # disk size, and need neither a GCP project nor Packer, so this is cheaper than it looks.
-  image: ubuntu-os-cloud/ubuntu-2204-lts
+  image: mattermost/platform-extensions
   shell: /bin/bash
   machine_type: n1-standard-2
   ports:

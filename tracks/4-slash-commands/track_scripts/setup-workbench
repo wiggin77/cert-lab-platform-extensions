@@ -100,6 +100,13 @@ phase_summary() {
     if [ "${#PHASE_LOG[@]}" -gt 0 ]; then
         printf '%s\n' "${PHASE_LOG[@]}" | sort -rn | sed 's/^/[setup]   /' || true
     fi
+
+    # Reported at exit, and the pair with the "machine:" line at the top is the point: that
+    # one is the stock image before anything is installed, this one is after every toolchain,
+    # node_modules and Go cache the track will ever create. The difference is what a baked
+    # image has to hold, and it is the only honest way to size one. Guessing it produces
+    # either a cramped image that fails a track or a number nobody can defend.
+    log "root fs at exit: $(df -h / 2>/dev/null | awk 'NR==2{print $3" used, "$4" free of "$2}' || echo '?')"
     log "=============================================================="
     return 0
 }
@@ -108,6 +115,60 @@ trap phase_summary EXIT
 # Which resource is scarce is not answerable from the phase times alone, so record the
 # shape of the machine they were measured on.
 log "machine: $(nproc 2>/dev/null || echo '?') vCPU, root fs $(df -h / 2>/dev/null | awk 'NR==2{print $2" total, "$4" free"}' || echo '?')"
+
+# A baked image should say which one it is. Without this, "why was that run slow" is
+# unanswerable afterwards: a stale image, a missing one and a slow network are the same
+# shape in the phase times. image/provision.sh writes the marker, so no marker means the
+# stock base.
+log "image: $(cat /etc/lab-image-version 2>/dev/null || echo 'none, stock base image')"
+
+# The base OS is not in the image marker (the image is built before anyone thinks to record
+# it), and it matters: Debian 13 measured setup-workbench at 49s against Ubuntu 22.04's 77s,
+# almost entirely in apt. Printing it here means a run's log always says which it was.
+log "os: $(grep -m1 '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d'"' -f2 || echo '?')"
+
+# ---------------------------------------------------------------------------
+# Verify-then-install
+# ---------------------------------------------------------------------------
+# A baked VM image can arrive with the toolchains already present, so every install below
+# checks first. The rule is that the image is an OPTIMISATION AND NEVER A DEPENDENCY: this
+# same script has to work on the stock ubuntu-2204-lts base and on a baked one, so a stale
+# or absent image costs time, not correctness, and rolling the image back is one line in
+# config.yml rather than a revert of this file.
+#
+# The version variables at the top stay authoritative. These helpers COMPARE against them
+# rather than merely testing for presence, so an image carrying Node 20 when NODE_MAJOR
+# says 22 still installs 22. That distinction is not academic: lab-configure-agents shipped
+# a presence check that reported "already installed" for a prepackaged Agents build which
+# predated the bridge the lab needs, and the failure surfaced two challenges away.
+#
+# code-server is the exception, since it is deliberately unpinned and installs latest.
+# Presence is the only check available, which means a baked code-server is never refreshed
+# by this script. That is the trade for the 13s; bump it by rebuilding the image.
+
+have_pkgs() {
+    local pkg
+    for pkg in "$@"; do
+        dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null \
+            | grep -q "^install ok installed$" || return 1
+    done
+    return 0
+}
+
+have_node() {
+    command -v node >/dev/null 2>&1 || return 1
+    command -v npm >/dev/null 2>&1 || return 1
+    [ "$(node --version 2>/dev/null | sed 's/^v\([0-9]*\).*/\1/')" = "$1" ]
+}
+
+have_go() {
+    command -v go >/dev/null 2>&1 || return 1
+    [ "$(go version 2>/dev/null | awk '{print $3}')" = "go$1" ]
+}
+
+have_code_server() {
+    command -v code-server >/dev/null 2>&1
+}
 
 wait_for() {
     local url="$1" name="$2" tries="${3:-90}" unit="${4:-}"
@@ -202,10 +263,15 @@ install_pkgs() {
 # make is in this list, not in build-essential below, because Module 6's plugin build is
 # driven by a Makefile. build-essential is allowed to fail; make is not.
 phase "apt base packages"
-install_pkgs git curl jq make ca-certificates || {
-    echo "[setup] FAILED: could not install base packages" >&2
-    exit 1
-}
+BASE_PKGS=(git curl jq make ca-certificates)
+if have_pkgs "${BASE_PKGS[@]}"; then
+    log "base packages already installed, skipping apt"
+else
+    install_pkgs "${BASE_PKGS[@]}" || {
+        echo "[setup] FAILED: could not install base packages" >&2
+        exit 1
+    }
+fi
 
 # Only needed if a native npm module or a cgo build shows up. Neither has, and Mattermost
 # plugins build with CGO_ENABLED=0, so its absence must not stop the track. It went
@@ -215,30 +281,36 @@ install_pkgs git curl jq make ca-certificates || {
 # want a C toolchain. Measured at 13 s.
 if [ "$NEEDS_PLUGIN_TOOLCHAIN" = true ]; then
     phase "apt build-essential"
-    if ! install_pkgs build-essential; then
+    if have_pkgs build-essential; then
+        log "build-essential already installed, skipping apt"
+    elif ! install_pkgs build-essential; then
         log "build-essential unavailable, continuing without it. apt says:"
         apt-cache policy build-essential 2>&1 | sed 's/^/[setup]   /'
     fi
 fi
 
 phase "install Node ${NODE_MAJOR}"
-log "installing Node ${NODE_MAJOR}"
-# Same failure shape as the apt update above, and Node is not optional. The nodesource
-# script adds a repo and refreshes the lists; if it fails with its output discarded, the
-# install below reports "Unable to locate package nodejs" and nothing says why.
-if ! curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/tmp/nodesource.log 2>&1; then
-    log "the nodesource setup script failed:"
-    tail -10 /tmp/nodesource.log 2>/dev/null | sed 's/^/[setup]   /' || true
-fi
+if have_node "$NODE_MAJOR"; then
+    log "node $(node --version) and npm $(npm --version) already present, skipping install"
+else
+    log "installing Node ${NODE_MAJOR}"
+    # Same failure shape as the apt update above, and Node is not optional. The nodesource
+    # script adds a repo and refreshes the lists; if it fails with its output discarded, the
+    # install below reports "Unable to locate package nodejs" and nothing says why.
+    if ! curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/tmp/nodesource.log 2>&1; then
+        log "the nodesource setup script failed:"
+        tail -10 /tmp/nodesource.log 2>/dev/null | sed 's/^/[setup]   /' || true
+    fi
 
-# It refreshed the lists itself, so let install_pkgs skip straight to installing, and get
-# its retries and diagnostics for free.
-APT_UPDATED=true
-install_pkgs nodejs || {
-    echo "[setup] FAILED: could not install nodejs, so neither lab service can run" >&2
-    exit 1
-}
-log "node $(node --version), npm $(npm --version)"
+    # It refreshed the lists itself, so let install_pkgs skip straight to installing, and
+    # get its retries and diagnostics for free.
+    APT_UPDATED=true
+    install_pkgs nodejs || {
+        echo "[setup] FAILED: could not install nodejs, so neither lab service can run" >&2
+        exit 1
+    }
+    log "node $(node --version), npm $(npm --version)"
+fi
 
 # Go is only needed for Module 6. Before the split it was installed in every run, because
 # every learner reached Module 6 eventually in the same sandbox. Now only track 6 does.
@@ -246,12 +318,16 @@ log "node $(node --version), npm $(npm --version)"
 # expensive ones below, not for its own sake.
 if [ "$NEEDS_PLUGIN_TOOLCHAIN" = true ]; then
     phase "install Go ${GO_VERSION}"
-    log "installing Go ${GO_VERSION}"
-    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
-    rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz
-    ln -sf /usr/local/go/bin/go /usr/local/bin/go
-    ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
-    log "$(go version)"
+    if have_go "$GO_VERSION"; then
+        log "$(go version) already present, skipping install"
+    else
+        log "installing Go ${GO_VERSION}"
+        curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tgz
+        rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz
+        ln -sf /usr/local/go/bin/go /usr/local/bin/go
+        ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+        log "$(go version)"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -594,8 +670,13 @@ WantedBy=multi-user.target
 EOF
 
 phase "install code-server"
-log "installing code-server"
-curl -fsSL https://code-server.dev/install.sh | sh >/dev/null 2>&1
+# Unpinned by design, so presence is the only check there is. See the note by have_pkgs.
+if have_code_server; then
+    log "code-server already present, skipping install"
+else
+    log "installing code-server"
+    curl -fsSL https://code-server.dev/install.sh | sh >/dev/null 2>&1
+fi
 mkdir -p "${LEARNER_HOME}/.config/code-server"
 cat > "${LEARNER_HOME}/.config/code-server/config.yaml" <<EOF
 bind-addr: 0.0.0.0:8080

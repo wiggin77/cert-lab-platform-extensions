@@ -19,6 +19,7 @@ Two npm packages, no monorepo tooling. Install and run them independently.
 | `handler/` | The learner's integration handler, modules 2 to 5. Ships to `/home/learner/handler`. |
 | `variants/` | Per-module solution overlays plus `apply-variant.sh`. |
 | `tracks/` | Six Instruqt tracks, one per curriculum module. See `tracks/README.md`. |
+| `image/` | `provision.sh`, the contents of the baked workbench VM image. Not built yet. |
 
 ## Commands
 

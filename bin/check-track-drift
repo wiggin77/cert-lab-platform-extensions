@@ -16,6 +16,12 @@
 # track behaving differently, weeks later, with nothing pointing at the cause. Run this
 # before pushing, not after.
 #
+# It also checks image/provision.sh, which is not a track file but has the same failure
+# shape: it names NODE_MAJOR and GO_VERSION a second time, because it runs in the Instruqt
+# image builder where this repo is not checked out. A bump in setup-workbench that misses
+# provision.sh produces a stale image, and a stale image is invisible: setup just quietly
+# reinstalls the toolchain and the saving disappears.
+#
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
@@ -125,6 +131,30 @@ for t in "${TRACKS[@]}"; do
     fi
 done
 
+# ---------------------------------------------------------------------------
+# image/provision.sh must agree with setup-workbench on the toolchain versions
+# ---------------------------------------------------------------------------
+PROVISION="${HERE}/image/provision.sh"
+REF_WORKBENCH="${TRACKS_DIR}/${REFERENCE}/track_scripts/setup-workbench"
+
+if [ -f "$PROVISION" ]; then
+    echo
+    echo "image/provision.sh versus ${REFERENCE}/track_scripts/setup-workbench:"
+    for var in NODE_MAJOR GO_VERSION; do
+        want="$(grep -m1 "^${var}=" "$REF_WORKBENCH" 2>/dev/null | cut -d= -f2)"
+        got="$(grep -m1 "^${var}=" "$PROVISION" 2>/dev/null | cut -d= -f2)"
+        if [ "$want" = "$got" ] && [ -n "$want" ]; then
+            printf '  OK    %s=%s\n' "$var" "$got"
+        else
+            printf '  DRIFT %s: setup-workbench says %s, provision.sh says %s\n' \
+                "$var" "${want:-?}" "${got:-?}"
+            echo "          rebuild the image after reconciling, or it installs at boot anyway"
+            fail=1
+        fi
+    done
+fi
+
+echo
 if [ "$fail" -eq 0 ]; then
     echo "no drift"
 else
