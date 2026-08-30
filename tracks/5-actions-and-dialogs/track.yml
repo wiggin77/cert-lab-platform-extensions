@@ -31,5 +31,5 @@ lab_config:
   feedback_tab_enabled: false
   loadingMessages: true
   hideStopButton: false
-checksum: "7248830511930619318"
-enhanced_loading: false
+checksum: "4576348084597871709"
+enhanced_loading: true
