@@ -152,13 +152,16 @@ Each silent when violated, and only the script ordering below is documented by I
   handshake error, because Instruqt injects its own `sandbox-agent` as PID 1.
 - Instruqt **ignores the image's `WORKDIR`** and runs from `/`.
 - **A container process that exits is not restarted.** Mattermost can lose a startup race
-  against sandbox DNS, exit fatally, and stay down for the life of the sandbox.
-  `setup-mattermost` relaunches it, and **the race is lost about half the time**: across
-  nine measured runs, five had the server up in 4 to 8s and four took 2m25s to 2m28s in the
-  relaunch path. Since the split a toolchain-free track finishes `setup-workbench` in ~71s,
-  so a lost race now costs more than everything else in the sandbox combined, and it is the
-  largest single term in track load time. An image cannot fix it; `cmd:` on the container
-  could. Do not describe it as usually fine without fresh numbers.
+  against sandbox DNS, exit fatally, and stay down for the life of the sandbox. This is why
+  `cmd:` matters: a container that waits cannot lose the race, and a container that dies
+  cannot recover.
+  **Fixed by `cmd:` on the container**, which waits for `a-postgres` to resolve before
+  exec'ing Mattermost. Before the fix the race was lost in four of nine measured runs, each
+  costing 2m25s in `setup-mattermost`'s relaunch path, which made it the largest single term
+  in track load time. Note `cmd:` works and `command:` does not: the latter is
+  docker-compose's key name, parses fine, and is silently ignored. `setup-mattermost`'s
+  relaunch stays as a backstop. See the comment in `tracks/*/config.yml` before changing the
+  wrapper, particularly on why it uses `getent` and not `/dev/tcp`.
 - Lifecycle script stdout is the **only** log Instruqt surfaces, and each script sees one
   host. A failure with no printed reason costs a full run to diagnose, so scripts print
   their own diagnostics (`wait_for` dumps `journalctl`; each container has a setup script).

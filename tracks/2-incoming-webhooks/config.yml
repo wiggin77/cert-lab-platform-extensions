@@ -89,40 +89,47 @@ containers:
   # The relaunch itself stays regardless: losing the race without it leaves the server down
   # for the life of the sandbox. Do not re-summarise this as "usually fine" without new
   # numbers, and do not delete the relaunch because a few runs looked healthy.
-  # EXPERIMENT, 2026-08-29: does Instruqt honour `cmd:`? `command:` demonstrably does not.
-  # If this works, Mattermost waits for its database instead of racing it, and the ~2m25s
-  # relaunch path in setup-mattermost stops being entered at all.
+  # `cmd:` FIXES THE DATABASE RACE, and it is the reason this container starts reliably.
   #
-  # Safe by construction, and each part of that matters:
-  #   - The image's entrypoint is literally `exec "$@"` (verified by reading /entrypoint.sh
-  #     out of mattermost/mattermost-team-edition:10.5), so cmd is exec'd directly and
-  #     nothing in the image's own startup is bypassed.
-  #   - Each probe is wrapped in `timeout 2`. A bare `(exec 3<>/dev/tcp/host/port)` HANGS
-  #     FOREVER when the name does not resolve yet, which is exactly the case here, and a
-  #     hang is worse than the race it fixes. Verified by watching a test container sit in
-  #     that subshell indefinitely with the database already up.
-  #   - It gives up after 150 attempts and starts anyway, so the worst case is today's
-  #     behaviour rather than a container that never starts.
-  #   - `timeout`, `bash` and `seq` all exist in the image. `nc` and `pg_isready` do not.
+  # Mattermost gives its database about 8 seconds before exiting fatally: DBPingAttempts is
+  # 5 (channels/store/sqlstore/store.go) with a 2s DBConnRetrySleep
+  # (public/utils/sql/sql_utils.go), both compile-time constants. The failure is a DNS race
+  # rather than a database-slow-to-start race, and that distinction is what makes this fix
+  # work: an NXDOMAIN returns instantly instead of consuming the 10s ping timeout, so the
+  # entire allowance burns in under a second while the name is still unresolvable. Once the
+  # name resolves, Mattermost's own retry comfortably covers a database still starting up.
   #
-  # Tested locally against the real images before pushing: the container survived 20s with
-  # no database (it dies at ~8s without this), connected on attempt 9 once postgres started,
-  # and logged "Server is listening" with zero "cannot create store" failures.
-  # cmd is a STRING here, not a list. A YAML sequence fails validate with
-  # "cannot unmarshal !!seq into string", which at least proves the key is in Instruqt's
-  # schema, unlike `command:` which parses and is then silently ignored.
+  # Measured before the fix, nine runs on 2026-08-29: five had the server up in 4 to 8s, and
+  # four lost the race and spent 2m25s to 2m28s in setup-mattermost's relaunch path. At ~145s
+  # that was the single largest term in track load time, larger than everything else in a
+  # sandbox combined, and no VM image could have fixed it.
   #
-  # Waiting for DNS rather than for the port is deliberate and is what the failure analysis
-  # above actually calls for. The race is an NXDOMAIN race: Mattermost gives the database
-  # 5 pings at 2s apart, and an unresolvable name fails instantly rather than consuming that
-  # budget, so the whole 10s allowance is burned in well under a second. Once the name
-  # resolves, Mattermost's own retry covers a database that is up but not yet listening.
+  # The first run with this wrapper logged "resolved after 13s", which is a run that would
+  # certainly have lost the race, and setup-mattermost finished in 4s.
   #
-  # getent, not /dev/tcp. A bare `(exec 3<>/dev/tcp/host/port)` HANGS FOREVER when the name
-  # does not resolve, which is precisely the condition here. Verified by watching a test
-  # container sit in that subshell indefinitely with the database already up. getent has its
-  # own resolver timeouts and cannot hang like that.
-  cmd: bash -c 'for i in $(seq 1 120); do getent hosts a-postgres >/dev/null 2>&1 && break; sleep 1; done; echo "[wait] a-postgres resolved after ${i}s, starting Mattermost"; exec mattermost'
+  # Four things about the form below are load bearing:
+  #
+  #   1. `cmd:`, not `command:`. `command:` is docker-compose's key name, parses fine, and is
+  #      silently ignored: an earlier wait wrapper written that way had no effect at all.
+  #      `cmd` is in Instruqt's schema, proven by a YAML list failing validate with
+  #      "cannot unmarshal !!seq into string". It takes a STRING, not a list.
+  #   2. `getent hosts`, not `/dev/tcp`. A bare `(exec 3<>/dev/tcp/host/port)` HANGS FOREVER
+  #      when the name does not resolve, which is exactly the condition here. Verified in a
+  #      local container that sat in that subshell indefinitely with the database already up.
+  #      A hang is worse than the race it fixes, since the sandbox would never come up at all.
+  #      Wrapping each probe in `timeout 2` also works, but `cmd` being a string makes the
+  #      nested quoting worse for no benefit.
+  #   3. It gives up after 120 attempts and starts anyway, so the worst case is the old
+  #      behaviour rather than a container that never starts.
+  #   4. The image's entrypoint is literally `exec "$@"` (read out of
+  #      mattermost/mattermost-team-edition:10.5), so this is exec'd directly and nothing in
+  #      the image's own startup is bypassed. `bash`, `getent` and `seq` are all present;
+  #      `nc` and `pg_isready` are not.
+  #
+  # setup-mattermost's relaunch path STAYS. It is now rarely entered rather than never, this
+  # wrapper gives up rather than blocking forever, and losing the race without a relaunch
+  # leaves the server down for the life of the sandbox.
+  cmd: bash -c 'for i in $(seq 1 120); do getent hosts a-postgres >/dev/null 2>&1 && break; sleep 1; done; exec mattermost'
 
   ports:
   - 8065

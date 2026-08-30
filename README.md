@@ -145,10 +145,9 @@ Outstanding:
   toolchain. The Go *module* cache is cheap to rebuild, so the thing worth baking into a
   custom VM image is the Go *build* cache, along with the apt packages, Node and code-server.
   Hot start is ruled out on cost.
-- **Mattermost loses a DNS race with its database about half the time**, costing ~2m25s in
-  `setup-mattermost`'s relaunch path against 4 to 8s when it wins. Since the split that is
-  the largest single term in track load, larger than everything else in a toolchain-free
-  sandbox combined, and no VM image can fix it. See the `cmd:` note in `tracks/*/config.yml`.
+- Mattermost used to lose a DNS race with its database in four of nine measured runs,
+  costing ~2m25s each time. Fixed with `cmd:` on the container, which waits for the database
+  name to resolve before starting the server.
 - CI outside Instruqt. `instruqt track test` covers the apply-and-check loop today, but it
   needs a live sandbox, so it is not something a pull request can run.
 
