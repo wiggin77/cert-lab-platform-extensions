@@ -99,13 +99,18 @@ containers:
   # entire allowance burns in under a second while the name is still unresolvable. Once the
   # name resolves, Mattermost's own retry comfortably covers a database still starting up.
   #
-  # Measured before the fix, nine runs on 2026-08-29: five had the server up in 4 to 8s, and
-  # four lost the race and spent 2m25s to 2m28s in setup-mattermost's relaunch path. At ~145s
-  # that was the single largest term in track load time, larger than everything else in a
-  # sandbox combined, and no VM image could have fixed it.
+  # Measured, 2026-08-29 and 30:
   #
-  # The first run with this wrapper logged "resolved after 13s", which is a run that would
-  # certainly have lost the race, and setup-mattermost finished in 4s.
+  #   BEFORE, 9 runs   5 won the race at 4 to 8s; 4 lost it and spent 2m25s to 2m28s in
+  #                    setup-mattermost's relaunch path. At ~145s that was the single largest
+  #                    term in track load time, larger than everything else in a sandbox
+  #                    combined, and no VM image could have fixed it.
+  #   AFTER, 5 runs    0 relaunches. setup-mattermost took 2, 2, 4, 8 and 9s.
+  #
+  # Two details make that more than five lucky runs. One run logged "resolved after 13s" from
+  # a temporary marker in the wrapper, which is a run that would certainly have failed, since
+  # Mattermost allows about 8s. And four of the five were launched simultaneously as a batch,
+  # which is the same shape as an earlier batch that lost 2 of 4.
   #
   # Four things about the form below are load bearing:
   #

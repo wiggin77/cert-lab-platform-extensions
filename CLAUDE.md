@@ -158,7 +158,8 @@ Each silent when violated, and only the script ordering below is documented by I
   **Fixed by `cmd:` on the container**, which waits for `a-postgres` to resolve before
   exec'ing Mattermost. Before the fix the race was lost in four of nine measured runs, each
   costing 2m25s in `setup-mattermost`'s relaunch path, which made it the largest single term
-  in track load time. Note `cmd:` works and `command:` does not: the latter is
+  in track load time. After it, five runs and no relaunches, `setup-mattermost` taking 2 to
+  9s. Note `cmd:` works and `command:` does not: the latter is
   docker-compose's key name, parses fine, and is silently ignored. `setup-mattermost`'s
   relaunch stays as a backstop. See the comment in `tracks/*/config.yml` before changing the
   wrapper, particularly on why it uses `getent` and not `/dev/tcp`.
