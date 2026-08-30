@@ -17,8 +17,10 @@ curriculum module 4, sets `LAB_MODULE=4`, and grades with `check-challenge.sh 4 
 | `5-actions-and-dialogs/` | Platform Extensions 5: Post Actions and Dialogs | yes | 1 |
 | `6-plugins/` | Platform Extensions 6: Plugins | yes | 2 |
 
-Track 1 provisions nothing and loads instantly. Its content is a **placeholder**: Module 1's
-theory has not been written yet, and the track exists for the numbering and the navigation.
+Track 1 provisions nothing and loads instantly. It carries the scenario framing, the map of
+the five labs, and the explanation of which code is the learner's and which is scaffolding.
+Because it loads instantly, anything the learner must read belongs in its assignment body
+rather than its notes, which barely appear.
 
 ## Workflow
 

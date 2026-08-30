@@ -13,8 +13,6 @@ description: |-
   Take the tracks in order. Each one starts with the previous modules' work already
   in place, so you can begin a later lab without having finished an earlier one, but
   the concepts do build.
-
-  Module 1's own theory content is still to be written.
 icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
 tags:
 - integrations
@@ -34,5 +32,5 @@ lab_config:
   feedback_tab_enabled: false
   loadingMessages: true
   hideStopButton: false
-checksum: "12047759954896999680"
+checksum: "2775708167853325021"
 enhanced_loading: false

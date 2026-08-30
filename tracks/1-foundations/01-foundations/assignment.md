@@ -32,10 +32,6 @@ lands formatted in `~alerts`, escalates itself to `~incidents`, can be enriched 
 demand, carries a working Escalate button, and renders through a custom interface you
 wrote in Go.
 
-> **Module 1's theory content is still to be written.** The orientation below is
-> accurate and worth reading, but the conceptual material that belongs in this module
-> is not here yet.
-
 ## The certification path
 
 Six modules, numbered to match the curriculum. This is Module 1. The five that follow
