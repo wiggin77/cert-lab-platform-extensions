@@ -1,11 +1,17 @@
 # Baking a custom workbench VM image
 
-Status: W1 done, image not built. The platform mechanics below are sourced from Instruqt's
-docs rather than assumed; see "Sources". What remains unverified is called out explicitly.
+Status: **W1, W2 and W3 done, 2026-08-30.** The image exists, all five tracks point at it,
+and track 2 passed three consecutive runs on it.
 
-The remaining blocker is that W2 is a browser flow. `image/provision.sh` is written and the
-version drift check covers it, so building the image is now a paste-and-save in the Instruqt
-UI rather than a design question.
+The image is `mattermost/platform-extensions`: an Instruqt Host image, 10 GB,
+`debian-cloud/debian-12` base, marker `20260830-0431 node=22 go=1.25.5`.
+
+**Result: `setup-workbench` went from 77-112s to 14-15s, and the learner's wait from about
+2m31s to about 50s.** The remaining ~26s of that is terraform, which is a fixed platform cost
+no image can touch.
+
+W4 (roll out and test all five) is running. W5 (the Go build cache) is still an open decision
+and is now less attractive, since track 6's toolchain install was never the expensive part.
 
 Depends on: the per-module track split, which is done. Read
 `implementation-plans/split-into-per-module-tracks.md` first, since the split is what
@@ -293,6 +299,17 @@ disappears with nothing printed.
 
 ### W2. Build the image
 
+DONE. Built 2026-08-30 as `mattermost/platform-extensions`, 10 GB, on
+`debian-cloud/debian-12`. The customise step was `image/provision.sh` pasted into the browser
+terminal, since the repo was not yet pushed for the curl form to work.
+
+Note the base is Debian 12, not the Ubuntu 22.04 this document originally assumed, and not
+the Debian 13 that measured fastest unbaked. Debian 12 is the right choice anyway: it is on
+Instruqt's documented public image list where 13 is not, and once apt is baked the base's apt
+speed stops mattering, which is exactly what the numbers in W3 show.
+
+The original instructions, kept because rebuilding follows them again:
+
 Route A, and `image/provision.sh` is written. Create the Host image from an Ubuntu 22.04
 base, run that script in the browser terminal (paste it, or curl it from the repo's raw URL,
 which the script's own header gives), Save, then record the image name and date here.
@@ -304,7 +321,34 @@ Give the disk enough room for phase 2 even if phase 2 never happens, since resiz
 more disruptive than provisioning generously now, and per the section above the extra space
 costs nothing in speed either way.
 
-### W3. Point ONE track at it and measure
+### W3. Point ONE track at it and measure. DONE
+
+Track 2 on `mattermost/platform-extensions`, three consecutive `instruqt track test` runs,
+all passing, participants `f5htik76g9rf`, `jnx1vs7r7evh`, `b4atky8cebap`:
+
+| Phase | Ubuntu 22.04, unbaked | Debian 13, unbaked | Debian 12, baked |
+| --- | --- | --- | --- |
+| apt base packages | 21-45s | 8s | 0s, 0s, 1s |
+| install Node 22 | 22-25s | 15s | 1s, 1s, 0s |
+| install code-server | 12-14s | 13s | 0s, 0s, 0s |
+| `setup-workbench` total | 77s, 82s, 112s | 49s | **15s, 14s, 46s** |
+| lifecycle scripts, end to end | ~107s | ~63s | **24s, 22s, 57s** |
+
+Every run logged the marker and all three skip lines, so the verify-then-install path from W1
+is confirmed working rather than merely present.
+
+**Run 3's 46s was a 32s `git clone lab repo`**, against 0-1s in the other two. That is GitHub
+network variance and nothing to do with the image. It is worth keeping in the record as the
+reason three runs were required: a single run landing on that outlier would have understated
+the result by a factor of three, and a single run landing on runs 1 or 2 would have hidden
+that this variance still exists at all. It has not gone away, it has only stopped being
+dominated by installs.
+
+**Disk, now measured rather than estimated.** The image boots with `5.3G free` of 9.7G and
+peaks at `4.1G used, 5.1G free`. 10 GB is correct, and the earlier suggestion of 20 GB was
+unnecessary.
+
+### W3 as originally written
 
 Track 2, because it is the fastest to run and has no seeding to confuse the picture. Change
 `image:` in `tracks/2-incoming-webhooks/config.yml` only, push, and run
